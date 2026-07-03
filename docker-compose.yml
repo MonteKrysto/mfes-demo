@@ -1,0 +1,144 @@
+services:
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data --debug /data/debug.log --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite-data:/data
+
+  deployment-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter deployment dev:api
+    depends_on:
+      - azurite
+    environment:
+      AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
+      DEPLOYMENT_PUBLIC_BASE_URL: http://localhost:5050
+    ports:
+      - "5050:5050"
+
+  deployment-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter deployment dev:ui
+    depends_on:
+      - deployment-api
+    environment:
+      DEPLOYMENT_API_PROXY_TARGET: http://deployment-api:5050
+    ports:
+      - "5176:5176"
+
+  host-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter host dev:api
+    ports:
+      - "6073:6073"
+
+  host-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter host dev:ui
+    depends_on:
+      - host-api
+      - deployment-api
+    environment:
+      VITE_DEPLOYMENT_MANIFEST_URL: http://localhost:5050/api/environments/dev/host-manifest
+      VITE_HOST_API_URL: http://localhost:6073/api
+    ports:
+      - "5173:5173"
+
+  frodos-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter frodos-franks dev:api
+    ports:
+      - "6074:6074"
+
+  frodos-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter frodos-franks build-and-preview:ui
+    depends_on:
+      - frodos-api
+      - shire-ui
+    environment:
+      VITE_FRODOS_API_URL: http://localhost:6074/api
+      VITE_SHIRE_SIDES_REMOTE_ENTRY_URL: http://localhost:5177/assets/remoteEntry.js
+    ports:
+      - "5174:5174"
+
+  boromirs-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter boromirs-burgers dev:api
+    ports:
+      - "6075:6075"
+
+  boromirs-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter boromirs-burgers build-and-preview:ui
+    depends_on:
+      - boromirs-api
+      - gondor-ui
+    environment:
+      VITE_BOROMIRS_API_URL: http://localhost:6075/api
+      VITE_GONDOR_SAUCES_REMOTE_ENTRY_URL: http://localhost:5178/assets/remoteEntry.js
+    ports:
+      - "5175:5175"
+
+  shire-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter franks-sides dev:api
+    ports:
+      - "6077:6077"
+
+  shire-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter franks-sides build-and-preview:ui
+    depends_on:
+      - shire-api
+    environment:
+      VITE_SHIRE_SIDES_API_URL: http://localhost:6077/api
+    ports:
+      - "5177:5177"
+
+  gondor-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter burgers-sauces dev:api
+    ports:
+      - "6078:6078"
+
+  gondor-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter burgers-sauces build-and-preview:ui
+    depends_on:
+      - gondor-api
+    environment:
+      VITE_GONDOR_SAUCES_API_URL: http://localhost:6078/api
+    ports:
+      - "5178:5178"
+
+volumes:
+  azurite-data:

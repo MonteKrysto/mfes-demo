@@ -1,0 +1,43 @@
+{
+  "name": "mfes-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm build:remotes && concurrently -n host,frodos-franks,boromirs-burgers,franks-sides,burgers-sauces -c cyan,green,yellow,red,magenta \"pnpm --filter host dev\" \"pnpm --filter frodos-franks preview\" \"pnpm --filter boromirs-burgers preview\" \"pnpm --filter franks-sides preview\" \"pnpm --filter burgers-sauces preview\"",
+    "dev:host": "pnpm --filter host dev",
+    "dev:frodos-franks": "pnpm --filter frodos-franks dev",
+    "dev:boromirs-burgers": "pnpm --filter boromirs-burgers dev",
+    "dev:shire-sides": "pnpm --filter franks-sides dev",
+    "dev:gondor-sauces": "pnpm --filter burgers-sauces dev",
+    "dev:deployment": "pnpm --filter deployment dev",
+    "build:remotes": "pnpm --recursive --filter franks-sides --filter burgers-sauces --filter frodos-franks --filter boromirs-burgers build",
+    "build:frodos-franks": "pnpm --filter frodos-franks build",
+    "build:boromirs-burgers": "pnpm --filter boromirs-burgers build",
+    "build:shire-sides": "pnpm --filter franks-sides build",
+    "build:gondor-sauces": "pnpm --filter burgers-sauces build",
+    "build:deployment": "pnpm --filter deployment build",
+    "preview:remotes": "pnpm --parallel --filter frodos-franks --filter boromirs-burgers --filter franks-sides --filter burgers-sauces preview",
+    "preview:frodos-franks": "pnpm --filter frodos-franks preview",
+    "preview:boromirs-burgers": "pnpm --filter boromirs-burgers preview",
+    "preview:shire-sides": "pnpm --filter franks-sides preview",
+    "preview:gondor-sauces": "pnpm --filter burgers-sauces preview",
+    "build": "pnpm --recursive --filter './apps/*' build",
+    "preview": "pnpm --parallel --filter './apps/*' preview",
+    "typecheck": "pnpm --recursive --filter './apps/*' typecheck",
+    "typecheck:frodos-franks": "pnpm --filter frodos-franks typecheck",
+    "typecheck:boromirs-burgers": "pnpm --filter boromirs-burgers typecheck",
+    "lint": "pnpm --recursive --filter './apps/*' lint",
+    "test": "pnpm --recursive --filter './apps/*' test",
+    "azurite:up": "docker compose up -d azurite",
+    "azurite:down": "docker compose down",
+    "publish:frodos-franks": "pnpm --filter deployment publish:remote frodos-franks",
+    "publish:boromirs-burgers": "pnpm --filter deployment publish:remote boromirs-burgers",
+    "publish:shire-sides": "pnpm --filter deployment publish:remote franks-sides",
+    "publish:gondor-sauces": "pnpm --filter deployment publish:remote burgers-sauces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "tsx": "^4.20.4"
+  },
+  "packageManager": "pnpm@9.12.1"
+}

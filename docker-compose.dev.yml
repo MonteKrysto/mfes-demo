@@ -1,0 +1,79 @@
+services:
+  deployment-api:
+    volumes: &source-volumes
+      - ./apps/host/src:/workspace/apps/host/src
+      - ./apps/frodos-franks/src:/workspace/apps/frodos-franks/src
+      - ./apps/boromirs-burgers/src:/workspace/apps/boromirs-burgers/src
+      - ./apps/franks-sides/src:/workspace/apps/franks-sides/src
+      - ./apps/burgers-sauces/src:/workspace/apps/burgers-sauces/src
+      - ./apps/deployment/src:/workspace/apps/deployment/src
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  deployment-ui:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      DEPLOYMENT_API_PROXY_TARGET: http://deployment-api:5050
+
+  host-api:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  host-ui:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_DEPLOYMENT_MANIFEST_URL: http://localhost:5050/api/environments/dev/host-manifest
+      VITE_HOST_API_URL: http://localhost:6073/api
+
+  frodos-api:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  frodos-ui:
+    command: pnpm --filter frodos-franks dev:ui
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_FRODOS_API_URL: http://localhost:6074/api
+      VITE_SHIRE_SIDES_REMOTE_ENTRY_URL: http://localhost:5177/assets/remoteEntry.js
+
+  boromirs-api:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  boromirs-ui:
+    command: pnpm --filter boromirs-burgers dev:ui
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_BOROMIRS_API_URL: http://localhost:6075/api
+      VITE_GONDOR_SAUCES_REMOTE_ENTRY_URL: http://localhost:5178/assets/remoteEntry.js
+
+  shire-api:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  shire-ui:
+    command: pnpm --filter franks-sides dev:ui
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_SHIRE_SIDES_API_URL: http://localhost:6077/api
+
+  gondor-api:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+
+  gondor-ui:
+    command: pnpm --filter burgers-sauces dev:ui
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_GONDOR_SAUCES_API_URL: http://localhost:6078/api
