@@ -5,7 +5,7 @@ export const deploymentConfig = {
   storageConnectionString:
     process.env.AZURE_STORAGE_CONNECTION_STRING ??
     "UseDevelopmentStorage=true",
-  environments: ["dev", "staging", "prp", "prod"],
+  environments: ["dev", "staging", "prod"],
   remotes: [
     {
       id: "frodos-franks",

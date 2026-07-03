@@ -1,0 +1,53 @@
+{
+  "consumer": "gondor-sauces-ui",
+  "provider": "gondor-sauces-api",
+  "interactions": [
+    {
+      "description": "loads gondor sauces",
+      "request": { "method": "GET", "path": "/api/gondor-sauces/sauces" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "railStatus": { "type": "string" },
+            "sauces": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "name": { "type": "string" },
+                  "level": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "loads gondor sauce batches",
+      "request": { "method": "GET", "path": "/api/gondor-sauces/batches" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "batches": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "title": { "type": "string" },
+                  "value": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

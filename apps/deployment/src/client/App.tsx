@@ -3,7 +3,7 @@ import { ArrowRight, Boxes, Cloud, ExternalLink, FileText, Folder, RefreshCw, Ro
 import {
   getEnvironments,
   getRemotes,
-  getRemoteVersions,
+  getRemoteReleases,
   getStorageContainers,
   getStorageListing,
   promoteRemote,
@@ -11,17 +11,23 @@ import {
   setupStorage,
   type EnvironmentManifest,
   type RemoteDefinition,
-  type RemoteVersion,
+  type RemoteRelease,
   type StorageBlob,
   type StorageContainer,
   type StorageListing
 } from "./api";
 
-type VersionsByRemote = Record<string, RemoteVersion[]>;
+type ReleasesByRemote = Record<string, RemoteRelease[]>;
+
+const hostEnvironmentUrls: Record<string, string> = {
+  dev: trimTrailingSlash(import.meta.env.VITE_HOST_DEV_URL ?? "http://localhost:5183"),
+  staging: trimTrailingSlash(import.meta.env.VITE_HOST_STAGING_URL ?? "http://localhost:5184"),
+  prod: trimTrailingSlash(import.meta.env.VITE_HOST_PROD_URL ?? "http://localhost:5185")
+};
 
 export function App() {
   const [remotes, setRemotes] = useState<RemoteDefinition[]>([]);
-  const [versions, setVersions] = useState<VersionsByRemote>({});
+  const [releases, setReleases] = useState<ReleasesByRemote>({});
   const [environments, setEnvironments] = useState<EnvironmentManifest[]>([]);
   const [storageContainers, setStorageContainers] = useState<StorageContainer[]>([]);
   const [selectedContainer, setSelectedContainer] = useState("");
@@ -34,14 +40,14 @@ export function App() {
   async function refresh() {
     setError(null);
     const remoteResult = await getRemotes();
-    const [environmentResult, versionPairs] = await Promise.all([
+    const [environmentResult, releasePairs] = await Promise.all([
       getEnvironments(),
-      Promise.all(remoteResult.remotes.map(async (remote) => [remote.id, (await getRemoteVersions(remote.id)).versions] as const))
+      Promise.all(remoteResult.remotes.map(async (remote) => [remote.id, (await getRemoteReleases(remote.id)).releases] as const))
     ]);
 
     setRemotes(remoteResult.remotes);
     setEnvironments(environmentResult.environments);
-    setVersions(Object.fromEntries(versionPairs));
+    setReleases(Object.fromEntries(releasePairs));
     await refreshStorage(selectedContainer, storageListing?.prefix ?? "");
   }
 
@@ -53,8 +59,8 @@ export function App() {
   }, []);
 
   const latestByRemote = useMemo(
-    () => Object.fromEntries(Object.entries(versions).map(([remoteId, items]) => [remoteId, items[0]])),
-    [versions]
+    () => Object.fromEntries(Object.entries(releases).map(([remoteId, items]) => [remoteId, items.find(isDeployableRelease)])),
+    [releases]
   );
 
   async function run(label: string, action: () => Promise<unknown>) {
@@ -94,26 +100,37 @@ export function App() {
   }
 
   async function previewBlob(blob: StorageBlob) {
-    const response = await fetch(storageBlobUrl(blob.path));
+    const previewKey = `preview-${blob.path}`;
+    setBusy(previewKey);
+    setError(null);
 
-    if (!response.ok) {
-      throw new Error(`Unable to load ${blob.path}`);
+    try {
+      const response = await fetch(storageBlobUrl(blob.path));
+
+      if (!response.ok) {
+        throw new Error(`Unable to load ${blob.path}`);
+      }
+
+      const text = await response.text();
+      const truncated = text.length > 12000 ? `${text.slice(0, 12000)}\n\n... preview truncated ...` : text;
+      setStoragePreview({ path: blob.path, content: truncated });
+    } catch (previewError) {
+      setError(previewError instanceof Error ? previewError.message : "Failed to preview blob");
+    } finally {
+      setBusy(null);
     }
-
-    const text = await response.text();
-    const truncated = text.length > 12000 ? `${text.slice(0, 12000)}\n\n... preview truncated ...` : text;
-    setStoragePreview({ path: blob.path, content: truncated });
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
+    <main className="min-h-screen w-full overflow-x-hidden bg-slate-50 text-slate-950">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-5 py-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
+        <div className="mx-auto flex w-full max-w-7xl min-w-0 flex-col gap-4 px-4 py-5 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Azure local deployment control</p>
-            <h1 className="text-2xl font-semibold tracking-normal">Micro frontend releases</h1>
+            <h1 className="text-2xl font-semibold tracking-normal">Deployment control</h1>
+            <p className="mt-1 text-sm text-slate-500">Promote verified release bundles: frontend artifact, API version, and contract result together.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
             <button
               type="button"
               className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-medium disabled:opacity-50"
@@ -121,7 +138,7 @@ export function App() {
               onClick={() => run("setup", setupStorage)}
             >
               <Settings2 className="h-4 w-4" aria-hidden="true" />
-              {busy === "setup" ? "Setting up..." : "Setup Storage"}
+              {busy === "setup" ? "Initializing..." : "Initialize local storage"}
             </button>
             <button
               type="button"
@@ -136,50 +153,74 @@ export function App() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5">
+      <div className="mx-auto grid w-full max-w-7xl min-w-0 gap-5 px-4 py-5 sm:px-5">
         {error ? <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div> : null}
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          {remotes.map((remote) => (
-            <article key={remote.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{remote.packageName}</p>
-                  <h2 className="text-xl font-semibold">{remote.displayName}</h2>
-                </div>
-                <div className="rounded-md bg-blue-50 p-2 text-blue-700">
-                  <Boxes className="h-5 w-5" aria-hidden="true" />
-                </div>
-              </div>
-              <div className="mt-4 grid gap-3">
-                {(versions[remote.id] ?? []).length ? (
-                  (versions[remote.id] ?? []).slice(0, 4).map((version) => (
-                    <div key={version.version} className="grid gap-1 rounded-md border border-slate-200 px-3 py-2 text-sm">
-                      <div className="font-medium">{version.version}</div>
-                      <div className="text-slate-500">
-                        {version.branch} · {version.sha} · {new Date(version.createdAt).toLocaleString()}
+        <section className="grid min-w-0 gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Release bundles</h2>
+            <p className="text-sm text-slate-500">The newest verified bundle for each application. A bundle may change frontend, API, or both.</p>
+          </div>
+          <div className="grid min-w-0 gap-4 lg:grid-cols-2">
+            {remotes.map((remote) => {
+              const remoteReleases = releases[remote.id] ?? [];
+              const latestRelease = remoteReleases[0];
+
+              return (
+                <article key={remote.id} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{remote.packageName}</p>
+                      <h3 className="text-xl font-semibold">{remote.displayName}</h3>
+                    </div>
+                    <div className="rounded-md bg-blue-50 p-2 text-blue-700">
+                      <Boxes className="h-5 w-5" aria-hidden="true" />
+                    </div>
+                  </div>
+
+                  {latestRelease ? (
+                    <div className="mt-4 grid gap-3">
+                      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest release</p>
+                        <div className="mt-1 font-semibold">{releaseLabel(latestRelease)}</div>
+                        <div className="mt-1 text-xs text-slate-500">{releaseSource(latestRelease)}</div>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                          <ReleaseBadge kind="frontend" changed={latestRelease.frontend.changed} />
+                          <ReleaseBadge kind="api" changed={latestRelease.backend.changed} />
+                          <span className={latestRelease.contract.verified ? "rounded bg-emerald-50 px-2 py-1 text-emerald-700" : "rounded bg-red-50 px-2 py-1 text-red-700"}>
+                            Contract {latestRelease.contract.verified ? "verified" : "failed"}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid gap-2 text-sm">
+                        {remoteReleases.slice(0, 3).map((release) => (
+                          <div key={release.version} className="rounded-md border border-slate-200 px-3 py-2">
+                            <div className="font-medium">{releaseLabel(release)}</div>
+                            <div className="mt-1 truncate text-xs text-slate-500">ID {displayVersionId(release.version)}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-md border border-dashed border-slate-300 px-3 py-5 text-sm text-slate-500">
-                    No saved versions. Publish with `pnpm --filter deployment publish:remote {remote.packageName}`.
-                  </div>
-                )}
-              </div>
-            </article>
-          ))}
+                  ) : (
+                    <div className="mt-4 rounded-md border border-dashed border-slate-300 px-3 py-5 text-sm text-slate-500">
+                      No release bundles. Run a fake CI target for this application.
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
             <div>
-              <h2 className="text-lg font-semibold">Environment mappings</h2>
-              <p className="text-sm text-slate-500">Each mapping updates the runtime manifest consumed by the host.</p>
+              <h2 className="text-lg font-semibold">Environment releases</h2>
+              <p className="text-sm text-slate-500">Each environment points at one verified release bundle per application.</p>
             </div>
             <Cloud className="h-5 w-5 text-blue-700" aria-hidden="true" />
           </div>
-          <div className="overflow-x-auto">
+          <div className="min-w-0 overflow-x-auto">
             <table className="w-full min-w-[760px] border-collapse text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -192,26 +233,61 @@ export function App() {
               <tbody>
                 {environments.map((environment) => (
                   <tr key={environment.environment} className="border-t border-slate-200 align-top">
-                    <td className="px-4 py-4 font-semibold">{environment.environment}</td>
+                    <td className="px-4 py-4">
+                      <div className="grid gap-2">
+                        <div className="font-semibold">{environment.environment}</div>
+                        <a
+                          className="inline-flex items-center gap-1 text-xs font-medium text-blue-700"
+                          href={hostEnvironmentUrl(environment.environment)}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          Open host
+                        </a>
+                      </div>
+                    </td>
                     {remotes.map((remote) => {
                       const current = environment.remotes[remote.id];
                       const selectionKey = `${environment.environment}:${remote.id}`;
-                      const selectedVersion = selectedVersions[selectionKey] ?? current?.version ?? versions[remote.id]?.[0]?.version ?? "";
+                      const selectedVersion = selectedVersions[selectionKey] ?? current?.version ?? "";
+                      const currentRelease = current?.version ? findRelease(releases[remote.id] ?? [], current.version) : null;
+                      const selectedRelease = selectedVersion ? findRelease(releases[remote.id] ?? [], selectedVersion) : null;
                       const setActionKey = `set-${environment.environment}-${remote.id}`;
                       const latestProdActionKey = `latest-prod-${remote.id}`;
 
                       return (
                         <td key={remote.id} className="px-4 py-4">
                           <div className="grid gap-2">
-                            <div className="text-sm font-medium">{current?.version ?? "Not assigned"}</div>
+                            <div className="grid gap-1 text-sm">
+                              <div className="font-medium">
+                                {currentRelease
+                                  ? isDeployableRelease(currentRelease)
+                                    ? releaseLabel(currentRelease)
+                                    : "Legacy release - not deployable"
+                                  : current?.version
+                                    ? "Legacy release - not deployable"
+                                    : "Not assigned"}
+                              </div>
+                              {current?.version ? (
+                                <>
+                                  <div className="text-xs text-slate-500">
+                                    Frontend {shortVersion(current.frontendVersion)} · API {shortVersion(current.backendVersion)} · Contract{" "}
+                                    {current.contractVerified ? "verified" : "unknown"}
+                                  </div>
+                                  <div className="truncate text-xs text-slate-400">Release ID {displayVersionId(current.version)}</div>
+                                </>
+                              ) : null}
+                            </div>
                             <select
-                              className="h-9 rounded-md border border-slate-300 bg-white px-2 text-sm"
+                              className="h-9 w-full min-w-0 rounded-md border border-slate-300 bg-white px-2 text-sm"
                               value={selectedVersion}
                               onChange={(event) => setSelectedVersions((state) => ({ ...state, [selectionKey]: event.target.value }))}
                             >
-                              {(versions[remote.id] ?? []).map((version) => (
-                                <option key={version.version} value={version.version}>
-                                  {version.version}
+                              <option value="">Select release</option>
+                              {(releases[remote.id] ?? []).map((release) => (
+                                <option key={release.version} value={release.version} disabled={!isDeployableRelease(release)}>
+                                  {releaseOptionLabel(release)}
                                 </option>
                               ))}
                             </select>
@@ -219,7 +295,7 @@ export function App() {
                               <button
                                 type="button"
                                 className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs font-medium"
-                                disabled={!selectedVersion || busy !== null}
+                                disabled={!selectedVersion || !selectedRelease || !isDeployableRelease(selectedRelease) || busy !== null}
                                 onClick={() =>
                                   run(setActionKey, () =>
                                     setEnvironmentRemote(environment.environment, remote.id, selectedVersion)
@@ -241,7 +317,7 @@ export function App() {
                                   }
                                 >
                                   <Rocket className="h-3.5 w-3.5" aria-hidden="true" />
-                                  {busy === latestProdActionKey ? "Promoting..." : "Latest to prod"}
+                                  {busy === latestProdActionKey ? "Promoting..." : "Promote latest release"}
                                 </button>
                               ) : null}
                             </div>
@@ -256,7 +332,7 @@ export function App() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-lg font-semibold">Azurite storage browser</h2>
@@ -292,7 +368,7 @@ export function App() {
             </div>
           </div>
 
-          <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.8fr)]">
+          <div className="grid min-w-0 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_minmax(300px,0.55fr)]">
             <div className="min-w-0">
               <StorageBreadcrumbs
                 prefix={storageListing?.prefix ?? ""}
@@ -302,7 +378,7 @@ export function App() {
                   )
                 }
               />
-              <div className="mt-3 overflow-hidden rounded-md border border-slate-200">
+              <div className="mt-3 overflow-x-auto rounded-md border border-slate-200">
                 <table className="w-full min-w-[700px] border-collapse text-left text-sm">
                   <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <tr>
@@ -355,11 +431,12 @@ export function App() {
                             <button
                               type="button"
                               className="h-8 rounded-md border border-slate-300 px-2 text-xs font-medium"
-                              onClick={() =>
-                                run(`preview-${blob.path}`, () => previewBlob(blob))
-                              }
+                              disabled={busy !== null}
+                              onClick={() => {
+                                void previewBlob(blob);
+                              }}
                             >
-                              Preview
+                              {busy === `preview-${blob.path}` ? "Loading..." : "Preview"}
                             </button>
                             <a
                               className="inline-flex h-8 items-center gap-1 rounded-md border border-slate-300 px-2 text-xs font-medium"
@@ -397,27 +474,37 @@ export function App() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-semibold">Promote environment</h2>
-          <div className="mt-3 grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-            <select id="remote" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm">
-              {remotes.map((remote) => (
-                <option key={remote.id} value={remote.id}>{remote.displayName}</option>
-              ))}
-            </select>
-            <select id="fromEnvironment" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm">
-              {environments.map((environment) => (
-                <option key={environment.environment} value={environment.environment}>{environment.environment}</option>
-              ))}
-            </select>
-            <select id="toEnvironment" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm" defaultValue="prod">
-              {environments.map((environment) => (
-                <option key={environment.environment} value={environment.environment}>{environment.environment}</option>
-              ))}
-            </select>
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold">Copy an environment release</h2>
+          <p className="text-sm text-slate-500">Use this when one environment should point at the same release bundle as another environment.</p>
+          <div className="mt-3 grid min-w-0 gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <label className="grid gap-1 text-sm font-medium">
+              Application
+              <select id="remote" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm font-normal">
+                {remotes.map((remote) => (
+                  <option key={remote.id} value={remote.id}>{remote.displayName}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Copy from
+              <select id="fromEnvironment" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm font-normal">
+                {environments.map((environment) => (
+                  <option key={environment.environment} value={environment.environment}>{environment.environment}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-medium">
+              Copy to
+              <select id="toEnvironment" className="h-10 rounded-md border border-slate-300 bg-white px-2 text-sm font-normal" defaultValue="prod">
+                {environments.map((environment) => (
+                  <option key={environment.environment} value={environment.environment}>{environment.environment}</option>
+                ))}
+              </select>
+            </label>
             <button
               type="button"
-              className="h-10 rounded-md bg-slate-950 px-3 text-sm font-medium text-white disabled:opacity-50"
+              className="mt-auto h-10 rounded-md bg-slate-950 px-3 text-sm font-medium text-white disabled:opacity-50"
               disabled={busy !== null}
               onClick={() => {
                 const remoteId = (document.getElementById("remote") as HTMLSelectElement).value;
@@ -426,7 +513,7 @@ export function App() {
                 run(`promote-${remoteId}`, () => promoteRemote({ remoteId, fromEnvironment, toEnvironment }));
               }}
             >
-              Promote
+              Copy release
             </button>
           </div>
         </section>
@@ -467,8 +554,80 @@ function StorageBreadcrumbs({
   );
 }
 
+function ReleaseBadge({ kind, changed }: { kind: "api" | "frontend"; changed: boolean }) {
+  const label = kind === "frontend" ? "Frontend" : "API";
+
+  return (
+    <span className={changed ? "rounded bg-blue-50 px-2 py-1 text-blue-700" : "rounded bg-slate-100 px-2 py-1 text-slate-600"}>
+      {label} {changed ? "changed" : "reused"}
+    </span>
+  );
+}
+
+function findRelease(releases: RemoteRelease[], version: string) {
+  return releases.find((release) => release.version === version) ?? null;
+}
+
+function releaseLabel(release: RemoteRelease) {
+  return `${formatDateTime(release.createdAt)} - ${releaseSource(release)}`;
+}
+
+function releaseOptionLabel(release: RemoteRelease) {
+  const frontend = release.frontend.changed ? "FE changed" : "FE reused";
+  const api = release.backend.changed ? "API changed" : "API reused";
+  const status = isDeployableRelease(release) ? "" : " - legacy, cannot deploy";
+  return `${releaseLabel(release)} - ${frontend}, ${api}${status}`;
+}
+
+function isDeployableRelease(release: RemoteRelease) {
+  return Boolean(release.frontend.remoteEntryPath && release.backend.snapshotPath && release.contract.verified);
+}
+
+function releaseSource(release: RemoteRelease) {
+  if (release.branch === "local" && release.sha === "local") {
+    return "local dev";
+  }
+
+  return `${release.branch} @ ${release.sha}`;
+}
+
+function shortVersion(version: string | null | undefined) {
+  if (!version) {
+    return "unknown";
+  }
+
+  return displayVersionId(version);
+}
+
+function displayVersionId(version: string) {
+  const label = version.replace(/^\d{8}T\d{6}Z-/, "");
+
+  if (label === "local-local" || label === "local-dev") {
+    return "local dev";
+  }
+
+  return label;
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function storageBlobUrl(path: string) {
   return `/storage/${path.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function hostEnvironmentUrl(environment: string) {
+  return hostEnvironmentUrls[environment] ?? hostEnvironmentUrls.dev;
+}
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
 }
 
 function formatBytes(size: number) {

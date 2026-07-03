@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { BadgePercent, Beaker, ClipboardList, Flame, Home, Layers3, Shield } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 
 type AppProps = {
   basename?: string;
-  remoteEntries?: Record<string, { version: string; remoteEntryUrl: string }>;
+  remoteEntries?: Record<string, { apiBaseUrl?: string; version: string; remoteEntryUrl: string }>;
+  apiBaseUrl?: string;
 };
 
 type PanelItem = {
@@ -45,7 +46,7 @@ type RemoteHandle = {
 };
 
 type RemoteModule = {
-  mount: (element: HTMLElement, options?: { basename?: string }) => RemoteHandle;
+  mount: (element: HTMLElement, options?: { apiBaseUrl?: string; basename?: string }) => RemoteHandle;
 };
 
 type FederatedRemoteModule = RemoteModule | { default: RemoteModule };
@@ -55,8 +56,9 @@ type FederatedRemoteEntry = {
   get: (module: string) => Promise<(() => FederatedRemoteModule) | FederatedRemoteModule>;
 };
 
-const apiBaseUrl = import.meta.env.VITE_BOROMIRS_API_URL ?? "http://localhost:6075/api";
+const localApiBaseUrl = import.meta.env.VITE_BOROMIRS_API_URL ?? "http://localhost:6075/api";
 const gondorSaucesRemoteEntryUrl = import.meta.env.VITE_GONDOR_SAUCES_REMOTE_ENTRY_URL ?? "http://localhost:5178/assets/remoteEntry.js";
+const ApiBaseUrlContext = createContext(localApiBaseUrl);
 
 const navItems = [
   { to: "/", label: "Grill", icon: Home },
@@ -66,10 +68,12 @@ const navItems = [
   { to: "/gondor-sauces", label: "Gondor Sauces", icon: Beaker }
 ];
 
-export function App({ basename, remoteEntries }: AppProps) {
+export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
   const gondorSaucesEntryUrl = remoteEntries?.["gondor-sauces"]?.remoteEntryUrl ?? gondorSaucesRemoteEntryUrl;
+  const gondorSaucesApiBaseUrl = remoteEntries?.["gondor-sauces"]?.apiBaseUrl;
 
   return (
+    <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[18rem_1fr]">
       <aside className="border-b border-border bg-slate-950 px-5 py-5 text-white lg:min-h-screen lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-3">
@@ -111,12 +115,13 @@ export function App({ basename, remoteEntries }: AppProps) {
           <Route path="/loyalty" element={<Loyalty />} />
           <Route
             path="/gondor-sauces/*"
-            element={<NestedRemote name="Gondor Sauces" remoteEntryUrl={gondorSaucesEntryUrl} basename={joinBasename(basename, "gondor-sauces")} />}
+            element={<NestedRemote name="Gondor Sauces" remoteEntryUrl={gondorSaucesEntryUrl} apiBaseUrl={gondorSaucesApiBaseUrl} basename={joinBasename(basename, "gondor-sauces")} />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
+    </ApiBaseUrlContext.Provider>
   );
 }
 
@@ -183,7 +188,7 @@ function Page({ title, subtitle, status, children }: { title: string; subtitle: 
   );
 }
 
-function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remoteEntryUrl: string; basename: string }) {
+function NestedRemote({ apiBaseUrl, name, remoteEntryUrl, basename }: { apiBaseUrl?: string; name: string; remoteEntryUrl: string; basename: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -199,7 +204,7 @@ function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remote
           return;
         }
 
-        handle = resolveRemoteModule(remoteModule).mount(container, { basename });
+        handle = resolveRemoteModule(remoteModule).mount(container, { apiBaseUrl, basename });
         setStatus("ready");
       })
       .catch((error) => {
@@ -217,7 +222,7 @@ function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remote
         container.innerHTML = "";
       }
     };
-  }, [basename, name, remoteEntryUrl]);
+  }, [apiBaseUrl, basename, name, remoteEntryUrl]);
 
   return (
     <section className="relative min-h-[30rem]">
@@ -276,6 +281,7 @@ function Panel({ title, value, detail }: { title: string; value: string; detail:
 }
 
 function useApiData<T>(path: string) {
+  const apiBaseUrl = useContext(ApiBaseUrlContext);
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -307,7 +313,7 @@ function useApiData<T>(path: string) {
     return () => {
       disposed = true;
     };
-  }, [path]);
+  }, [apiBaseUrl, path]);
 
   return { data, status };
 }

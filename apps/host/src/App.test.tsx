@@ -20,15 +20,11 @@ beforeEach(() => {
         });
       }
 
-      return Response.json({
-        environment: "dev",
-        remotes: {
-          "boromirs-burgers": {
-            version: "test",
-            remoteEntryUrl
-          }
-        }
-      });
+      if (url.includes("/assets/remoteEntry.js")) {
+        return Response.redirect(remoteEntryUrl);
+      }
+
+      return Response.json({ environment: "dev", remotes: {} });
     })
   );
 });
@@ -44,7 +40,7 @@ test("renders the empty host state", async () => {
   await waitFor(() => expect(fetch).toHaveBeenCalled());
 });
 
-test("renders a selected remote shell heading", async () => {
+test("renders a selected remote shell heading in local integration mode", async () => {
   render(
     <MemoryRouter initialEntries={["/boromirs-burgers"]}>
       <App />
@@ -52,5 +48,6 @@ test("renders a selected remote shell heading", async () => {
   );
 
   expect(screen.getByRole("heading", { name: "Boromirs Burgers" })).toBeInTheDocument();
-  await waitFor(() => expect(screen.queryByText("Loading remote...")).not.toBeInTheDocument());
+  await waitFor(() => expect(fetch).toHaveBeenCalledWith("http://localhost:6073/api/host/status"));
+  expect(fetch).not.toHaveBeenCalledWith("http://localhost:5050/api/environments/dev/host-manifest");
 });

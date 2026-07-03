@@ -9,8 +9,9 @@ export type RemoteHandle = {
 };
 
 export type RemoteMountOptions = {
+  apiBaseUrl?: string;
   basename?: string;
-  remoteEntries?: Record<string, { version: string; remoteEntryUrl: string }>;
+  remoteEntries?: Record<string, { apiBaseUrl?: string; version: string; remoteEntryUrl: string }>;
 };
 
 export function mount(element: HTMLElement, options: RemoteMountOptions = {}): RemoteHandle {
@@ -19,7 +20,7 @@ export function mount(element: HTMLElement, options: RemoteMountOptions = {}): R
   root.render(
     <React.StrictMode>
       <BrowserRouter basename={options.basename}>
-        <App basename={options.basename} remoteEntries={options.remoteEntries} />
+        <App apiBaseUrl={options.apiBaseUrl} basename={options.basename} remoteEntries={options.remoteEntries} />
       </BrowserRouter>
     </React.StrictMode>
   );

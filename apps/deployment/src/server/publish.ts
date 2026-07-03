@@ -2,8 +2,18 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import mime from "mime";
 import { deploymentConfig } from "./config.js";
-import { ensureContainer, remoteMetaPath, remoteVersionPrefix, writeJsonBlob } from "./storage.js";
-import type { RemoteVersion } from "./types.js";
+import {
+  backendMetaPath,
+  backendSnapshotPath,
+  contractArtifactPath,
+  ensureContainer,
+  releaseManifestPath,
+  releaseVersionPrefix,
+  remoteMetaPath,
+  remoteVersionPrefix,
+  writeJsonBlob
+} from "./storage.js";
+import type { BackendVersion, ContractVerification, RemoteRelease, RemoteVersion } from "./types.js";
 
 export type PublishRemoteInput = {
   remoteId: string;
@@ -11,6 +21,23 @@ export type PublishRemoteInput = {
   branch: string;
   sha: string;
   distPath: string;
+};
+
+export type PublishReleaseInput = {
+  remoteId: string;
+  version: string;
+  branch: string;
+  sha: string;
+  frontend: {
+    version: string;
+    remoteEntryPath: string;
+    artifactPrefix: string;
+  };
+  contractPath: string;
+  backend?: BackendVersion;
+  backendSnapshot?: Record<string, unknown>;
+  frontendChanged?: boolean;
+  backendChanged?: boolean;
 };
 
 export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVersion> {
@@ -57,6 +84,85 @@ export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVe
 
   await writeJsonBlob(remoteMetaPath(input.remoteId, input.version), meta);
   return meta;
+}
+
+export async function publishRelease(input: PublishReleaseInput): Promise<RemoteRelease> {
+  const remote = deploymentConfig.remotes.find((item) => item.id === input.remoteId);
+
+  if (!remote) {
+    throw new Error(`Unknown remote: ${input.remoteId}`);
+  }
+
+  const contract = JSON.parse(await fs.readFile(input.contractPath, "utf8")) as {
+    consumer: string;
+    provider: string;
+  };
+  const contractPath = contractArtifactPath(input.remoteId, input.version);
+  const contractContent = await fs.readFile(input.contractPath);
+  const container = await ensureContainer();
+
+  await container.getBlockBlobClient(contractPath).uploadData(contractContent, {
+    blobHTTPHeaders: {
+      blobContentType: "application/json; charset=utf-8"
+    }
+  });
+
+  const snapshotPath = backendSnapshotPath(input.remoteId, input.version);
+
+  if (!input.backend && !input.backendSnapshot) {
+    throw new Error(`Backend snapshot is required for ${input.remoteId} release ${input.version}`);
+  }
+
+  if (input.backendSnapshot) {
+    await writeJsonBlob(snapshotPath, input.backendSnapshot);
+  }
+
+  const backend: BackendVersion = input.backend
+    ? {
+        ...input.backend,
+        changed: false
+      }
+    : {
+        remoteId: input.remoteId,
+        version: input.version,
+        branch: input.branch,
+        sha: input.sha,
+        createdAt: new Date().toISOString(),
+        image: `local.azurecr.io/${remote.packageName}-api:${input.version}`,
+        changed: input.backendChanged ?? true,
+        snapshotPath
+      };
+
+  const verification: ContractVerification = {
+    remoteId: input.remoteId,
+    version: input.version,
+    contractPath,
+    provider: contract.provider,
+    consumer: contract.consumer,
+    verified: true,
+    verifiedAt: new Date().toISOString()
+  };
+
+  const release: RemoteRelease = {
+    remoteId: input.remoteId,
+    version: input.version,
+    branch: input.branch,
+    sha: input.sha,
+    createdAt: new Date().toISOString(),
+    releasePath: releaseManifestPath(input.remoteId, input.version),
+    frontend: {
+      changed: input.frontendChanged ?? true,
+      version: input.frontend.version,
+      remoteEntryPath: input.frontend.remoteEntryPath,
+      artifactPrefix: input.frontend.artifactPrefix
+    },
+    backend,
+    contract: verification
+  };
+
+  await writeJsonBlob(backendMetaPath(input.remoteId, input.version), backend);
+  await writeJsonBlob(releaseManifestPath(input.remoteId, input.version), release);
+  return release;
 }
 
 async function listFiles(dir: string): Promise<string[]> {

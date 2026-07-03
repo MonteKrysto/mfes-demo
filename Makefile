@@ -2,7 +2,7 @@ COMPOSE ?= docker compose
 DEV_COMPOSE ?= docker compose -f docker-compose.yml -f docker-compose.dev.yml
 SERVICE ?= azurite
 
-.PHONY: help build pull up down restart ps logs logs-follow ports clean dev-build dev-up dev-down dev-ps dev-logs dev-logs-follow azurite-up azurite-down azurite-logs azurite-restart publish-dev fake-ci-frodos-franks fake-ci-boromirs-burgers fake-ci-shire-sides fake-ci-gondor-sauces
+.PHONY: help build pull up down restart ps logs logs-follow ports clean dev-build dev-up dev-down dev-ps dev-logs dev-logs-follow azurite-up azurite-down azurite-logs azurite-restart publish-dev fake-ci-frodos-franks fake-ci-frodos-franks-backend fake-ci-frodos-franks-frontend fake-ci-boromirs-burgers fake-ci-boromirs-burgers-backend fake-ci-boromirs-burgers-frontend fake-ci-shire-sides fake-ci-shire-sides-backend fake-ci-shire-sides-frontend fake-ci-gondor-sauces fake-ci-gondor-sauces-backend fake-ci-gondor-sauces-frontend
 
 help:
 	@printf "Container targets:\n"
@@ -25,10 +25,19 @@ help:
 	@printf "  make dev-logs-follow  Follow bind-mounted dev logs\n"
 	@printf "\nFake CI targets:\n"
 	@printf "  make publish-dev      Publish and promote all remotes to dev using host pnpm\n"
+	@printf "  make fake-ci-*        Publish release bundles only; assign environments in the deployment UI\n"
 	@printf "  make fake-ci-frodos-franks\n"
+	@printf "  make fake-ci-frodos-franks-backend\n"
+	@printf "  make fake-ci-frodos-franks-frontend\n"
 	@printf "  make fake-ci-boromirs-burgers\n"
+	@printf "  make fake-ci-boromirs-burgers-backend\n"
+	@printf "  make fake-ci-boromirs-burgers-frontend\n"
 	@printf "  make fake-ci-shire-sides\n"
+	@printf "  make fake-ci-shire-sides-backend\n"
+	@printf "  make fake-ci-shire-sides-frontend\n"
 	@printf "  make fake-ci-gondor-sauces\n"
+	@printf "  make fake-ci-gondor-sauces-backend\n"
+	@printf "  make fake-ci-gondor-sauces-frontend\n"
 	@printf "\nAzurite aliases:\n"
 	@printf "  make azurite-up       Start Azurite only\n"
 	@printf "  make azurite-down     Stop the stack\n"
@@ -60,7 +69,7 @@ logs-follow:
 	$(COMPOSE) logs -f
 
 ports:
-	lsof -nP -iTCP:5050,5173,5174,5175,5176,5177,5178,6073,6074,6075,6077,6078 -sTCP:LISTEN
+	lsof -nP -iTCP:5050,5173,5174,5175,5176,5177,5178,5183,5184,5185,6073,6074,6075,6077,6078 -sTCP:LISTEN
 
 clean:
 	$(COMPOSE) down -v
@@ -106,16 +115,36 @@ publish-dev:
 
 fake-ci-frodos-franks:
 	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote frodos-franks
-	curl -sS -X POST http://localhost:5050/api/promote -H 'content-type: application/json' -d '{"remoteId":"frodos-franks","toEnvironment":"dev"}'
+
+fake-ci-frodos-franks-backend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote frodos-franks --frontend-current
+
+fake-ci-frodos-franks-frontend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote frodos-franks --backend-current
 
 fake-ci-boromirs-burgers:
 	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote boromirs-burgers
-	curl -sS -X POST http://localhost:5050/api/promote -H 'content-type: application/json' -d '{"remoteId":"boromirs-burgers","toEnvironment":"dev"}'
+
+fake-ci-boromirs-burgers-backend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote boromirs-burgers --frontend-current
+
+fake-ci-boromirs-burgers-frontend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote boromirs-burgers --backend-current
 
 fake-ci-shire-sides:
 	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote franks-sides
-	curl -sS -X POST http://localhost:5050/api/promote -H 'content-type: application/json' -d '{"remoteId":"shire-sides","toEnvironment":"dev"}'
+
+fake-ci-shire-sides-backend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote franks-sides --frontend-current
+
+fake-ci-shire-sides-frontend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote franks-sides --backend-current
 
 fake-ci-gondor-sauces:
 	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote burgers-sauces
-	curl -sS -X POST http://localhost:5050/api/promote -H 'content-type: application/json' -d '{"remoteId":"gondor-sauces","toEnvironment":"dev"}'
+
+fake-ci-gondor-sauces-backend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote burgers-sauces --frontend-current
+
+fake-ci-gondor-sauces-frontend:
+	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote burgers-sauces --backend-current

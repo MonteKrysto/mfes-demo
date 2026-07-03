@@ -1,0 +1,53 @@
+{
+  "consumer": "boromirs-burgers-ui",
+  "provider": "boromirs-burgers-api",
+  "interactions": [
+    {
+      "description": "loads the burger grill board",
+      "request": { "method": "GET", "path": "/api/burgers/grill" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "pattiesOnDeck": { "type": "number" },
+            "panels": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "title": { "type": "string" },
+                  "value": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "loads burger builds",
+      "request": { "method": "GET", "path": "/api/burgers/builds" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "builds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "name": { "type": "string" },
+                  "layers": { "type": "string" },
+                  "risk": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

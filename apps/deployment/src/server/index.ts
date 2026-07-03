@@ -6,15 +6,17 @@ import {
   ensureContainer,
   getContainerClient,
   getEnvironmentManifest,
-  getLatestRemoteVersion,
+  getLatestRemoteRelease,
+  listRemoteReleases,
   listStorageContainers,
   listStoragePath,
   listRemoteVersions,
   readJsonBlob,
+  releaseManifestPath,
   saveEnvironmentManifest,
-  toHostManifest
+  storageUrl
 } from "./storage.js";
-import type { RemoteVersion } from "./types.js";
+import type { EnvironmentManifest, HostManifest, RemoteRelease } from "./types.js";
 
 const app = express();
 
@@ -51,6 +53,14 @@ app.get("/api/remotes/:remoteId/versions", async (request, response, next) => {
   }
 });
 
+app.get("/api/remotes/:remoteId/releases", async (request, response, next) => {
+  try {
+    response.json({ releases: await listRemoteReleases(request.params.remoteId) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/environments", async (_request, response, next) => {
   try {
     const environments = await Promise.all(
@@ -65,6 +75,11 @@ app.get("/api/environments", async (_request, response, next) => {
 
 app.get("/api/environments/:environment/manifest", async (request, response, next) => {
   try {
+    if (!isConfiguredEnvironment(request.params.environment)) {
+      response.status(404).json({ error: `Unknown environment ${request.params.environment}` });
+      return;
+    }
+
     response.json(await getEnvironmentManifest(request.params.environment));
   } catch (error) {
     next(error);
@@ -73,7 +88,58 @@ app.get("/api/environments/:environment/manifest", async (request, response, nex
 
 app.get("/api/environments/:environment/host-manifest", async (request, response, next) => {
   try {
-    response.json(toHostManifest(await getEnvironmentManifest(request.params.environment)));
+    if (!isConfiguredEnvironment(request.params.environment)) {
+      response.status(404).json({ error: `Unknown environment ${request.params.environment}` });
+      return;
+    }
+
+    response.json(await toDeployableHostManifest(await getEnvironmentManifest(request.params.environment)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/runtime/:environment/:remoteId/*", async (request, response, next) => {
+  try {
+    const { environment, remoteId } = request.params;
+
+    if (!isConfiguredEnvironment(environment)) {
+      response.status(404).json({ error: `Unknown environment ${environment}` });
+      return;
+    }
+
+    const manifest = await getEnvironmentManifest(environment);
+    const assigned = manifest.remotes[remoteId];
+
+    if (!assigned?.version) {
+      response.status(404).json({ error: `No release is assigned to ${remoteId} in ${environment}` });
+      return;
+    }
+
+    const release = await readJsonBlob<RemoteRelease>(releaseManifestPath(remoteId, assigned.version));
+
+    if (!release?.backend.snapshotPath) {
+      response.status(404).json({ error: `No backend snapshot is available for ${remoteId} ${assigned.version}` });
+      return;
+    }
+
+    const snapshot = await readJsonBlob<Record<string, unknown>>(release.backend.snapshotPath);
+
+    if (!snapshot) {
+      response.status(404).json({ error: `Backend snapshot ${release.backend.snapshotPath} was not found` });
+      return;
+    }
+
+    const wildcardParams = request.params as unknown as { "0"?: string; "": string[] };
+    const runtimePath = `/${wildcardParams["0"] ?? wildcardParams[""].join("/")}`;
+    const body = snapshot[runtimePath];
+
+    if (!body) {
+      response.status(404).json({ error: `No backend snapshot response found for ${runtimePath}` });
+      return;
+    }
+
+    response.json(body);
   } catch (error) {
     next(error);
   }
@@ -100,19 +166,38 @@ app.get("/api/storage/containers/:containerName/blobs", async (request, response
 
 app.put("/api/environments/:environment/remotes/:remoteId", async (request, response, next) => {
   try {
+    if (!isConfiguredEnvironment(request.params.environment)) {
+      response.status(404).json({ error: `Unknown environment ${request.params.environment}` });
+      return;
+    }
+
     const version = String(request.body.version ?? "");
     const manifest = await getEnvironmentManifest(request.params.environment);
-    const meta = await readJsonBlob<RemoteVersion>(`remotes/${request.params.remoteId}/versions/${version}/meta.json`);
+    const release = await readJsonBlob<RemoteRelease>(releaseManifestPath(request.params.remoteId, version));
 
-    if (!meta) {
-      response.status(404).json({ error: `Version ${version} was not found for ${request.params.remoteId}` });
+    if (!release) {
+      response.status(404).json({ error: `Release ${version} was not found for ${request.params.remoteId}` });
+      return;
+    }
+
+    if (!release.contract.verified) {
+      response.status(409).json({ error: `Release ${version} has not passed contract verification` });
+      return;
+    }
+
+    if (!isDeployableRelease(release)) {
+      response.status(409).json({ error: deployableReleaseError(release) });
       return;
     }
 
     manifest.remotes[request.params.remoteId] = {
       remoteId: request.params.remoteId,
-      version: meta.version,
-      remoteEntryPath: meta.remoteEntryPath,
+      version: release.version,
+      releasePath: release.releasePath,
+      remoteEntryPath: release.frontend.remoteEntryPath,
+      frontendVersion: release.frontend.version,
+      backendVersion: release.backend.version,
+      contractVerified: release.contract.verified,
       updatedAt: new Date().toISOString()
     };
 
@@ -130,32 +215,56 @@ app.post("/api/promote", async (request, response, next) => {
     const fromEnvironment = request.body.fromEnvironment ? String(request.body.fromEnvironment) : undefined;
     let version = request.body.version ? String(request.body.version) : undefined;
 
+    if (!isConfiguredEnvironment(toEnvironment)) {
+      response.status(404).json({ error: `Unknown environment ${toEnvironment}` });
+      return;
+    }
+
+    if (fromEnvironment && !isConfiguredEnvironment(fromEnvironment)) {
+      response.status(404).json({ error: `Unknown environment ${fromEnvironment}` });
+      return;
+    }
+
     if (!version && fromEnvironment) {
       const source = await getEnvironmentManifest(fromEnvironment);
       version = source.remotes[remoteId]?.version ?? undefined;
     }
 
     if (!version) {
-      version = (await getLatestRemoteVersion(remoteId))?.version;
+      version = (await getLatestRemoteRelease(remoteId))?.version;
     }
 
     if (!version) {
-      response.status(404).json({ error: `No version found for ${remoteId}` });
+      response.status(404).json({ error: `No release found for ${remoteId}` });
       return;
     }
 
-    const meta = await readJsonBlob<RemoteVersion>(`remotes/${remoteId}/versions/${version}/meta.json`);
+    const release = await readJsonBlob<RemoteRelease>(releaseManifestPath(remoteId, version));
 
-    if (!meta) {
-      response.status(404).json({ error: `Version ${version} was not found for ${remoteId}` });
+    if (!release) {
+      response.status(404).json({ error: `Release ${version} was not found for ${remoteId}` });
+      return;
+    }
+
+    if (!release.contract.verified) {
+      response.status(409).json({ error: `Release ${version} has not passed contract verification` });
+      return;
+    }
+
+    if (!isDeployableRelease(release)) {
+      response.status(409).json({ error: deployableReleaseError(release) });
       return;
     }
 
     const manifest = await getEnvironmentManifest(toEnvironment);
     manifest.remotes[remoteId] = {
       remoteId,
-      version: meta.version,
-      remoteEntryPath: meta.remoteEntryPath,
+      version: release.version,
+      releasePath: release.releasePath,
+      remoteEntryPath: release.frontend.remoteEntryPath,
+      frontendVersion: release.frontend.version,
+      backendVersion: release.backend.version,
+      contractVerified: release.contract.verified,
       updatedAt: new Date().toISOString()
     };
     await saveEnvironmentManifest(manifest);
@@ -194,3 +303,54 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 app.listen(deploymentConfig.port, () => {
   console.log(`Deployment API listening on http://localhost:${deploymentConfig.port}`);
 });
+
+function isConfiguredEnvironment(environment: string) {
+  return (deploymentConfig.environments as readonly string[]).includes(environment);
+}
+
+async function toDeployableHostManifest(manifest: EnvironmentManifest): Promise<HostManifest> {
+  const remotes = await Promise.all(
+    Object.entries(manifest.remotes).map(async ([remoteId, remote]) => {
+      if (!remote.version || !remote.remoteEntryPath) {
+        return null;
+      }
+
+      const release = await readJsonBlob<RemoteRelease>(releaseManifestPath(remoteId, remote.version));
+
+      if (!release || !isDeployableRelease(release)) {
+        return null;
+      }
+
+      return [
+        remoteId,
+        {
+          version: remote.version,
+          remoteEntryUrl: storageUrl(remote.remoteEntryPath),
+          apiBaseUrl: `${deploymentConfig.publicBaseUrl}/api/runtime/${manifest.environment}/${remoteId}/api`
+        }
+      ] as const;
+    })
+  );
+
+  return {
+    environment: manifest.environment,
+    generatedAt: new Date().toISOString(),
+    remotes: Object.fromEntries(remotes.filter((remote): remote is NonNullable<typeof remote> => remote !== null))
+  };
+}
+
+function isDeployableRelease(release: RemoteRelease) {
+  return Boolean(release.frontend.remoteEntryPath && release.backend.snapshotPath && release.contract.verified);
+}
+
+function deployableReleaseError(release: RemoteRelease) {
+  if (!release.backend.snapshotPath) {
+    return `Release ${release.version} is a legacy build without a backend snapshot. Run fake CI again before assigning it to an environment.`;
+  }
+
+  if (!release.frontend.remoteEntryPath) {
+    return `Release ${release.version} does not include a frontend remote entry.`;
+  }
+
+  return `Release ${release.version} is not deployable.`;
+}

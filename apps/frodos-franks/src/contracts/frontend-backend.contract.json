@@ -1,0 +1,55 @@
+{
+  "consumer": "frodos-franks-ui",
+  "provider": "frodos-franks-api",
+  "interactions": [
+    {
+      "description": "loads the franks menu",
+      "request": { "method": "GET", "path": "/api/franks/menu" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "rushWindow": { "type": "string" },
+            "averageServiceTime": { "type": "string" },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "name": { "type": "string" },
+                  "price": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "loads the franks order board",
+      "request": { "method": "GET", "path": "/api/franks/orders" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "readyNow": { "type": "number" },
+            "tickets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "title": { "type": "string" },
+                  "value": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -16,6 +16,7 @@
     "build-and-preview:ui": "pnpm build && pnpm preview:ui",
     "typecheck": "tsc -b",
     "lint": "eslint .",
+    "contract:test": "vitest run src/server/contract.test.ts",
     "test": "vitest run"
   },
   "dependencies": {

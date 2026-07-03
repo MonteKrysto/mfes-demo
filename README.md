@@ -30,18 +30,20 @@ pnpm dev
 
 Default dev URLs:
 
-- Host: http://localhost:5173
+- Local integration host: http://localhost:5173
 - Frodos Franks: http://localhost:5174
 - Boromirs Burgers: http://localhost:5175
 - Shire Sides: http://localhost:5177
 - Gondor Sauces: http://localhost:5178
 
-Host app routes:
+Local host routes:
 
 - Frodos Franks: http://localhost:5173/frodos-franks
 - Boromirs Burgers: http://localhost:5173/boromirs-burgers
 - Nested Shire Sides: http://localhost:5173/frodos-franks/shire-sides
 - Nested Gondor Sauces: http://localhost:5173/boromirs-burgers/gondor-sauces
+
+`5173` is local integration only. It loads the local remote dev/preview URLs and is expected to reflect local source changes.
 
 The `dev` script builds the remote applications first, then runs the host dev server and serves each remote build with its API. This matches the Vite federation plugin behavior for remotes.
 
@@ -58,7 +60,10 @@ make up
 
 Useful compose URLs:
 
-- Host UI: http://localhost:5173
+- Local integration host: http://localhost:5173
+- Dev environment host: http://localhost:5183
+- Staging environment host: http://localhost:5184
+- Prod environment host: http://localhost:5185
 - Deployment UI: http://localhost:5176
 - Deployment API: http://localhost:5050
 - Frodos Franks UI/API: http://localhost:5174 / http://localhost:6074/api/franks/menu
@@ -92,15 +97,18 @@ In hot-reload mode, each remote team works against its standalone URL:
 - Shire Sides: http://localhost:5177
 - Gondor Sauces: http://localhost:5178
 
-The host still loads remotes from the deployment manifest at:
+The local integration host and deployed-style environment hosts are intentionally separate:
 
 ```text
-http://localhost:5050/api/environments/dev/host-manifest
+http://localhost:5173  -> local remote entries on 5174/5175
+http://localhost:5183  -> http://localhost:5050/api/environments/dev/host-manifest
+http://localhost:5184  -> http://localhost:5050/api/environments/staging/host-manifest
+http://localhost:5185  -> http://localhost:5050/api/environments/prod/host-manifest
 ```
 
-That means editing a remote's source and seeing it at its standalone URL is immediate, but the host only sees that change after a fake CI publish updates the remote artifact in Azurite and promotes it to `dev`.
+That means editing a remote's source and seeing it at its standalone URL or the local integration host is immediate. A deployed-style host reads frontend artifacts and backend snapshots from the assigned release bundle, so it only sees a change after fake CI publishes a new release and the deployment UI assigns that release to the environment.
 
-Fake CI publish commands:
+Fake CI publish commands create verified release bundles only. They do not assign that release to `dev`, `staging`, or `prod`; use the deployment UI to choose which environment should point at the new release. A release bundle contains the frontend artifact reference, fake backend image metadata, a backend response snapshot, and a stored frontend/backend contract verification result.
 
 ```bash
 make fake-ci-frodos-franks
@@ -109,7 +117,19 @@ make fake-ci-shire-sides
 make fake-ci-gondor-sauces
 ```
 
-After one of those finishes, refresh the host route. The host fetches the latest `dev` manifest and loads the newly published `remoteEntry.js`.
+Backend-only and frontend-only release simulations are also available:
+
+```bash
+make fake-ci-frodos-franks-backend
+make fake-ci-frodos-franks-frontend
+
+make fake-ci-boromirs-burgers-backend
+make fake-ci-boromirs-burgers-frontend
+```
+
+Backend-only releases reuse the currently published frontend artifact and publish a new backend version in the release manifest. Frontend-only releases build a new frontend artifact and mark the backend metadata as reused.
+
+After one of those finishes, open the deployment UI, select the new release for the target environment, and refresh that environment's host URL. The host fetches that environment's manifest and loads the assigned `remoteEntry.js`.
 
 This separation is intentional: standalone remote development uses hot reload; host integration uses built remote artifacts from the bucket, matching the deployment model.
 
@@ -210,10 +230,33 @@ pnpm publish:shire-sides
 pnpm publish:gondor-sauces
 ```
 
-The publish flow runs lint, tests, and build for the selected remote, then uploads the full `dist` folder to:
+The publish flow runs lint, tests, provider contract tests, and build for the selected remote, then uploads the full `dist` folder to:
 
 ```text
 remotes/{remote-id}/versions/{timestamp}-{sha}-{branch}/
+```
+
+It also writes a release bundle to:
+
+```text
+releases/{remote-id}/versions/{timestamp}-{sha}-{branch}/release.json
+releases/{remote-id}/versions/{timestamp}-{sha}-{branch}/backend.json
+releases/{remote-id}/versions/{timestamp}-{sha}-{branch}/backend-snapshot.json
+releases/{remote-id}/versions/{timestamp}-{sha}-{branch}/contracts/frontend-backend.contract.json
+```
+
+The release bundle is the deployable unit. Environments select release versions, not raw frontend versions. The host manifest is generated from the release's frontend `remoteEntry.js` and an environment-scoped API proxy URL. That proxy serves the release's backend snapshot, so local API hot reload does not leak into deployed-style environment hosts.
+
+Each remote owns a consumer contract at:
+
+```text
+apps/{remote}/src/contracts/frontend-backend.contract.json
+```
+
+Each backend verifies its provider response shape in:
+
+```text
+apps/{remote}/src/server/contract.test.ts
 ```
 
 Environment manifests are stored in the same container:
@@ -221,16 +264,17 @@ Environment manifests are stored in the same container:
 ```text
 environments/dev/manifest.json
 environments/staging/manifest.json
-environments/prp/manifest.json
 environments/prod/manifest.json
 ```
 
-The host now reads its remote URLs from a runtime manifest:
+Deployed-style host instances read their remote URLs from runtime manifests:
 
 ```text
-http://localhost:5050/api/environments/dev/host-manifest
+http://localhost:5183  -> environments/dev/manifest.json
+http://localhost:5184  -> environments/staging/manifest.json
+http://localhost:5185  -> environments/prod/manifest.json
 ```
 
-If that API is not running, the host falls back to the local remote preview URLs on ports `5174` and `5175`.
+If the deployment API is not running, the deployed-style hosts show a manifest error rather than falling back to local remote URLs.
 
-This runtime manifest is the key to avoiding host redeployments: the host build contains the manifest URL, not fixed remote artifact URLs. Updating the manifest changes which remote versions load on the next browser refresh.
+This runtime manifest is the key to avoiding host redeployments: the environment host build contains the deployment API base URL and an environment name, not fixed remote artifact URLs. Updating an environment manifest changes which remote versions load for that environment on the next browser refresh.

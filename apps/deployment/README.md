@@ -13,18 +13,21 @@ Immutable remote builds are stored by remote and version:
 - `remotes/frodos-franks/versions/{version}/...`
 - `remotes/boromirs-burgers/versions/{version}/...`
 
-Each version stores the full Vite build output, not only `remoteEntry.js`, because Module Federation remote entries load sibling JS and CSS chunks.
+Each version stores the full Vite build output, not only `remoteEntry.js`, because Module Federation remote entries load sibling JS and CSS chunks. Release bundles also store `backend-snapshot.json`, which is what deployed-style hosts read through the deployment API runtime proxy.
 
 Environment manifests are mutable pointers:
 
 - `environments/dev/manifest.json`
 - `environments/staging/manifest.json`
-- `environments/prp/manifest.json`
 - `environments/prod/manifest.json`
 
-The host reads a runtime host manifest from the API:
+Dedicated host URLs read runtime host manifests from the API:
 
-- `http://localhost:5050/api/environments/dev/host-manifest`
+- `http://localhost:5183` uses `http://localhost:5050/api/environments/dev/host-manifest`
+- `http://localhost:5184` uses `http://localhost:5050/api/environments/staging/host-manifest`
+- `http://localhost:5185` uses `http://localhost:5050/api/environments/prod/host-manifest`
+
+`http://localhost:5173` is the local integration host. It loads local remote entries and is not a deployed environment.
 
 Changing an environment manifest changes which remote version the host loads on refresh. The host does not need to be rebuilt for a remote version change.
 
@@ -63,6 +66,8 @@ BUILD_VERSION=20260630-demo-main pnpm publish:frodos-franks
 ```
 
 ## Promotion
+
+Publishing creates a verified release bundle in storage. It does not deploy that bundle to any environment by itself. The bundle includes the frontend artifact, fake backend image metadata, backend response snapshot, and contract verification result.
 
 The UI supports:
 

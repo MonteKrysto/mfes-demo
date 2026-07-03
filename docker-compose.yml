@@ -31,6 +31,9 @@ services:
       - deployment-api
     environment:
       DEPLOYMENT_API_PROXY_TARGET: http://deployment-api:5050
+      VITE_HOST_DEV_URL: http://localhost:5183
+      VITE_HOST_STAGING_URL: http://localhost:5184
+      VITE_HOST_PROD_URL: http://localhost:5185
     ports:
       - "5176:5176"
 
@@ -46,15 +49,63 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command: pnpm --filter host dev:ui
+    command: pnpm --filter host exec vite --host 0.0.0.0
     depends_on:
       - host-api
       - deployment-api
     environment:
-      VITE_DEPLOYMENT_MANIFEST_URL: http://localhost:5050/api/environments/dev/host-manifest
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
       VITE_HOST_API_URL: http://localhost:6073/api
     ports:
       - "5173:5173"
+
+  host-dev-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter host exec vite --host 0.0.0.0
+    depends_on:
+      - host-api
+      - deployment-api
+    environment:
+      HOST_UI_PORT: "5183"
+      VITE_HOST_ENVIRONMENT: dev
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+    ports:
+      - "5183:5183"
+
+  host-staging-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter host exec vite --host 0.0.0.0
+    depends_on:
+      - host-api
+      - deployment-api
+    environment:
+      HOST_UI_PORT: "5184"
+      VITE_HOST_ENVIRONMENT: staging
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+    ports:
+      - "5184:5184"
+
+  host-prod-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: pnpm --filter host exec vite --host 0.0.0.0
+    depends_on:
+      - host-api
+      - deployment-api
+    environment:
+      HOST_UI_PORT: "5185"
+      VITE_HOST_ENVIRONMENT: prod
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+    ports:
+      - "5185:5185"
 
   frodos-api:
     build:

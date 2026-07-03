@@ -15,6 +15,40 @@ export type RemoteVersion = {
   remoteEntryPath: string;
 };
 
+export type RemoteRelease = {
+  remoteId: string;
+  version: string;
+  branch: string;
+  sha: string;
+  createdAt: string;
+  releasePath: string;
+  frontend: {
+    changed: boolean;
+    version: string;
+    remoteEntryPath: string;
+    artifactPrefix: string;
+  };
+  backend: {
+    remoteId: string;
+    version: string;
+    branch: string;
+    sha: string;
+    createdAt: string;
+    image: string;
+    changed: boolean;
+    snapshotPath?: string;
+  };
+  contract: {
+    remoteId: string;
+    version: string;
+    contractPath: string;
+    provider: string;
+    consumer: string;
+    verified: boolean;
+    verifiedAt: string;
+  };
+};
+
 export type EnvironmentManifest = {
   environment: string;
   updatedAt: string;
@@ -23,7 +57,11 @@ export type EnvironmentManifest = {
     {
       remoteId: string;
       version: string | null;
+      releasePath?: string | null;
       remoteEntryPath: string | null;
+      frontendVersion?: string | null;
+      backendVersion?: string | null;
+      contractVerified?: boolean | null;
       updatedAt: string | null;
     }
   >;
@@ -60,6 +98,10 @@ export async function getRemotes() {
 
 export async function getRemoteVersions(remoteId: string) {
   return request<{ versions: RemoteVersion[] }>(`/api/remotes/${remoteId}/versions`);
+}
+
+export async function getRemoteReleases(remoteId: string) {
+  return request<{ releases: RemoteRelease[] }>(`/api/remotes/${remoteId}/releases`);
 }
 
 export async function getEnvironments() {

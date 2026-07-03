@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ClipboardCheck, Home, PackageCheck, Soup } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
@@ -26,15 +26,17 @@ type PrepResponse = {
   tasks: PrepTask[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_SHIRE_SIDES_API_URL ?? "http://localhost:6077/api";
+const localApiBaseUrl = import.meta.env.VITE_SHIRE_SIDES_API_URL ?? "http://localhost:6077/api";
+const ApiBaseUrlContext = createContext(localApiBaseUrl);
 
 const navItems = [
   { to: "/", label: "Sides", icon: Home },
   { to: "/prep", label: "Prep", icon: ClipboardCheck }
 ];
 
-export function App() {
+export function App({ apiBaseUrl }: { apiBaseUrl?: string }) {
   return (
+    <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
     <section className="min-h-screen bg-amber-50 text-stone-950">
       <header className="border-b border-amber-200 bg-white">
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -73,6 +75,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </section>
+    </ApiBaseUrlContext.Provider>
   );
 }
 
@@ -133,6 +136,7 @@ function Page({ title, subtitle, status, children }: { title: string; subtitle: 
 }
 
 function useApiData<T>(path: string) {
+  const apiBaseUrl = useContext(ApiBaseUrlContext);
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -164,7 +168,7 @@ function useApiData<T>(path: string) {
     return () => {
       disposed = true;
     };
-  }, [path]);
+  }, [apiBaseUrl, path]);
 
   return { data, status };
 }

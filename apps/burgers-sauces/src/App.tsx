@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { Beaker, ClipboardCheck, Home, ShieldCheck } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
@@ -26,15 +26,17 @@ type BatchesResponse = {
   batches: Batch[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_GONDOR_SAUCES_API_URL ?? "http://localhost:6078/api";
+const localApiBaseUrl = import.meta.env.VITE_GONDOR_SAUCES_API_URL ?? "http://localhost:6078/api";
+const ApiBaseUrlContext = createContext(localApiBaseUrl);
 
 const navItems = [
   { to: "/", label: "Rail", icon: Home },
   { to: "/batches", label: "Batches", icon: ClipboardCheck }
 ];
 
-export function App() {
+export function App({ apiBaseUrl }: { apiBaseUrl?: string }) {
   return (
+    <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
     <section className="min-h-screen bg-zinc-950 text-white">
       <header className="border-b border-zinc-800 bg-zinc-900">
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -77,6 +79,7 @@ export function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </section>
+    </ApiBaseUrlContext.Provider>
   );
 }
 
@@ -137,6 +140,7 @@ function Page({ title, subtitle, status, children }: { title: string; subtitle: 
 }
 
 function useApiData<T>(path: string) {
+  const apiBaseUrl = useContext(ApiBaseUrlContext);
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -168,7 +172,7 @@ function useApiData<T>(path: string) {
     return () => {
       disposed = true;
     };
-  }, [path]);
+  }, [apiBaseUrl, path]);
 
   return { data, status };
 }

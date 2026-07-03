@@ -15,6 +15,9 @@ services:
     environment:
       CHOKIDAR_USEPOLLING: "true"
       DEPLOYMENT_API_PROXY_TARGET: http://deployment-api:5050
+      VITE_HOST_DEV_URL: http://localhost:5183
+      VITE_HOST_STAGING_URL: http://localhost:5184
+      VITE_HOST_PROD_URL: http://localhost:5185
 
   host-api:
     volumes: *source-volumes
@@ -25,7 +28,34 @@ services:
     volumes: *source-volumes
     environment:
       CHOKIDAR_USEPOLLING: "true"
-      VITE_DEPLOYMENT_MANIFEST_URL: http://localhost:5050/api/environments/dev/host-manifest
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+
+  host-dev-ui:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      HOST_UI_PORT: "5183"
+      VITE_HOST_ENVIRONMENT: dev
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+
+  host-staging-ui:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      HOST_UI_PORT: "5184"
+      VITE_HOST_ENVIRONMENT: staging
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
+      VITE_HOST_API_URL: http://localhost:6073/api
+
+  host-prod-ui:
+    volumes: *source-volumes
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      HOST_UI_PORT: "5185"
+      VITE_HOST_ENVIRONMENT: prod
+      VITE_DEPLOYMENT_API_URL: http://localhost:5050
       VITE_HOST_API_URL: http://localhost:6073/api
 
   frodos-api:

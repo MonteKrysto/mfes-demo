@@ -28,5 +28,6 @@ test("renders deployment heading", async () => {
 
   render(<App />);
 
-  expect(await screen.findByText("Micro frontend releases")).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Deployment control" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Release bundles" })).toBeInTheDocument();
 });

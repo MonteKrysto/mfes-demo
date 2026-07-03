@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { CalendarDays, ChefHat, ClipboardList, Clock, Home, MapPin, PackageOpen, Star } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { buttonVariants } from "@/components/ui/button";
@@ -7,7 +7,8 @@ import { cn } from "@/lib/utils";
 
 type AppProps = {
   basename?: string;
-  remoteEntries?: Record<string, { version: string; remoteEntryUrl: string }>;
+  remoteEntries?: Record<string, { apiBaseUrl?: string; version: string; remoteEntryUrl: string }>;
+  apiBaseUrl?: string;
 };
 
 type MenuItem = {
@@ -49,7 +50,7 @@ type RemoteHandle = {
 };
 
 type RemoteModule = {
-  mount: (element: HTMLElement, options?: { basename?: string }) => RemoteHandle;
+  mount: (element: HTMLElement, options?: { apiBaseUrl?: string; basename?: string }) => RemoteHandle;
 };
 
 type FederatedRemoteModule = RemoteModule | { default: RemoteModule };
@@ -59,8 +60,9 @@ type FederatedRemoteEntry = {
   get: (module: string) => Promise<(() => FederatedRemoteModule) | FederatedRemoteModule>;
 };
 
-const apiBaseUrl = import.meta.env.VITE_FRODOS_API_URL ?? "http://localhost:6074/api";
+const localApiBaseUrl = import.meta.env.VITE_FRODOS_API_URL ?? "http://localhost:6074/api";
 const shireSidesRemoteEntryUrl = import.meta.env.VITE_SHIRE_SIDES_REMOTE_ENTRY_URL ?? "http://localhost:5177/assets/remoteEntry.js";
+const ApiBaseUrlContext = createContext(localApiBaseUrl);
 
 const navItems = [
   { to: "/", label: "Menu", icon: Home },
@@ -70,10 +72,12 @@ const navItems = [
   { to: "/shire-sides", label: "Shire Sides", icon: PackageOpen }
 ];
 
-export function App({ basename, remoteEntries }: AppProps) {
+export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
   const shireSidesEntryUrl = remoteEntries?.["shire-sides"]?.remoteEntryUrl ?? shireSidesRemoteEntryUrl;
+  const shireSidesApiBaseUrl = remoteEntries?.["shire-sides"]?.apiBaseUrl;
 
   return (
+    <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
     <div className="min-h-screen bg-background text-foreground">
       <header className="border-b-4 border-red-600 bg-card">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
@@ -108,11 +112,12 @@ export function App({ basename, remoteEntries }: AppProps) {
         <Route path="/catering" element={<Catering />} />
         <Route
           path="/shire-sides/*"
-          element={<NestedRemote name="Shire Sides" remoteEntryUrl={shireSidesEntryUrl} basename={joinBasename(basename, "shire-sides")} />}
+          element={<NestedRemote name="Shire Sides" remoteEntryUrl={shireSidesEntryUrl} apiBaseUrl={shireSidesApiBaseUrl} basename={joinBasename(basename, "shire-sides")} />}
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>
+    </ApiBaseUrlContext.Provider>
   );
 }
 
@@ -211,7 +216,7 @@ function PageShell({
   );
 }
 
-function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remoteEntryUrl: string; basename: string }) {
+function NestedRemote({ apiBaseUrl, name, remoteEntryUrl, basename }: { apiBaseUrl?: string; name: string; remoteEntryUrl: string; basename: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -227,7 +232,7 @@ function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remote
           return;
         }
 
-        handle = resolveRemoteModule(remoteModule).mount(container, { basename });
+        handle = resolveRemoteModule(remoteModule).mount(container, { apiBaseUrl, basename });
         setStatus("ready");
       })
       .catch((error) => {
@@ -245,7 +250,7 @@ function NestedRemote({ name, remoteEntryUrl, basename }: { name: string; remote
         container.innerHTML = "";
       }
     };
-  }, [basename, name, remoteEntryUrl]);
+  }, [apiBaseUrl, basename, name, remoteEntryUrl]);
 
   return (
     <section className="relative min-h-[30rem]">
@@ -304,6 +309,7 @@ function Feature({ title, value, detail }: { title: string; value: string; detai
 }
 
 function useApiData<T>(path: string) {
+  const apiBaseUrl = useContext(ApiBaseUrlContext);
   const [data, setData] = useState<T | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
@@ -335,7 +341,7 @@ function useApiData<T>(path: string) {
     return () => {
       disposed = true;
     };
-  }, [path]);
+  }, [apiBaseUrl, path]);
 
   return { data, status };
 }

@@ -22,6 +22,7 @@ type FederatedRemoteEntry = {
 type RemoteMountOptions = {
   basename?: string;
   remoteEntries?: HostManifest["remotes"];
+  apiBaseUrl?: string;
 };
 
 type RemoteDefinition = {
@@ -40,6 +41,7 @@ type HostManifest = {
     {
       version: string;
       remoteEntryUrl: string;
+      apiBaseUrl?: string;
     }
   >;
 };
@@ -68,8 +70,13 @@ const remotes: RemoteDefinition[] = [
   }
 ];
 
-const manifestUrl = import.meta.env.VITE_DEPLOYMENT_MANIFEST_URL ?? "http://localhost:5050/api/environments/dev/host-manifest";
+const environments = ["dev", "staging", "prod"] as const;
+type EnvironmentName = (typeof environments)[number];
+
+const deploymentApiBaseUrl = trimTrailingSlash(import.meta.env.VITE_DEPLOYMENT_API_URL ?? "http://localhost:5050");
 const hostApiBaseUrl = import.meta.env.VITE_HOST_API_URL ?? "http://localhost:6073/api";
+const hostEnvironment = getHostEnvironment();
+const isEnvironmentHost = hostEnvironment !== null;
 
 export function App() {
   return (
@@ -86,11 +93,15 @@ function HostShell() {
   const [collapsed, setCollapsed] = useState(false);
   const [manifest, setManifest] = useState<HostManifest | null>(null);
   const [hostStatus, setHostStatus] = useState<HostStatus | null>(null);
-  const [manifestStatus, setManifestStatus] = useState<"loading" | "ready" | "fallback">("loading");
+  const [manifestStatus, setManifestStatus] = useState<"error" | "loading" | "ready">(
+    isEnvironmentHost ? "loading" : "ready"
+  );
   const remote = remotes.find((item) => item.id === remoteId);
   const runtimeRemoteEntryUrl =
-    remote && manifestStatus !== "loading"
-      ? manifest?.remotes[remote.id]?.remoteEntryUrl ?? remote.localRemoteEntryUrl
+    remote && manifestStatus === "ready"
+      ? isEnvironmentHost
+        ? manifest?.remotes[remote.id]?.remoteEntryUrl ?? null
+        : remote.localRemoteEntryUrl
       : null;
 
   useEffect(() => {
@@ -113,7 +124,18 @@ function HostShell() {
         console.warn("Host API status could not be loaded.", error);
       });
 
-    fetch(manifestUrl)
+    if (!hostEnvironment) {
+      setManifest(null);
+      setManifestStatus("ready");
+      return () => {
+        disposed = true;
+      };
+    }
+
+    setManifest(null);
+    setManifestStatus("loading");
+
+    fetch(hostManifestUrl(hostEnvironment))
       .then((response) => {
         if (!response.ok) {
           throw new Error(`Manifest request failed: ${response.status}`);
@@ -128,9 +150,9 @@ function HostShell() {
         }
       })
       .catch((error) => {
-        console.warn("Using local remote entries because the deployment manifest could not be loaded.", error);
+        console.warn("Deployment manifest could not be loaded.", error);
         if (!disposed) {
-          setManifestStatus("fallback");
+          setManifestStatus("error");
         }
       });
 
@@ -210,18 +232,27 @@ function HostShell() {
               <h2 className="text-lg font-semibold">{remote?.name ?? "Select somewhere to eat"}</h2>
             </div>
             <div className="hidden rounded-md border border-border px-3 py-2 text-sm text-muted-foreground sm:block">
-              {hostStatus ? `${hostStatus.environment} - ${hostStatus.activeRemotes.length} remotes` : "Module Federation"}
+              {hostStatus ? `${hostLabel()} - ${hostStatus.activeRemotes.length} remotes` : hostLabel()}
             </div>
           </header>
           {remote && manifestStatus === "loading" ? (
             <div className="grid min-h-0 flex-1 place-items-center text-sm text-muted-foreground">Loading deployment manifest...</div>
+          ) : remote && manifestStatus === "error" ? (
+            <div className="grid min-h-0 flex-1 place-items-center px-6 text-center text-sm text-destructive">
+              Deployment manifest failed to load for {hostLabel()}.
+            </div>
           ) : remote && runtimeRemoteEntryUrl ? (
             <RemoteMount
               key={`${remote.id}:${runtimeRemoteEntryUrl}`}
               remote={remote}
               remoteEntryUrl={runtimeRemoteEntryUrl}
+              apiBaseUrl={manifest?.remotes[remote.id]?.apiBaseUrl}
               remoteEntries={manifest?.remotes}
             />
+          ) : remote && isEnvironmentHost ? (
+            <div className="grid min-h-0 flex-1 place-items-center px-6 text-center text-sm text-muted-foreground">
+              No deployed release is assigned to {remote.name} in {hostLabel()}.
+            </div>
           ) : (
             <EmptyState />
           )}
@@ -247,10 +278,12 @@ function EmptyState() {
 function RemoteMount({
   remote,
   remoteEntryUrl,
+  apiBaseUrl,
   remoteEntries
 }: {
   remote: RemoteDefinition;
   remoteEntryUrl: string;
+  apiBaseUrl?: string;
   remoteEntries?: HostManifest["remotes"];
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -270,6 +303,7 @@ function RemoteMount({
 
         handle = resolveRemoteModule(remoteModule).mount(container, {
           basename: `/${remote.id}`,
+          apiBaseUrl,
           remoteEntries
         });
         setStatus("ready");
@@ -289,7 +323,7 @@ function RemoteMount({
         container.innerHTML = "";
       }
     };
-  }, [remote, remoteEntryUrl, remoteEntries]);
+  }, [apiBaseUrl, remote, remoteEntryUrl, remoteEntries]);
 
   return (
     <section className="relative min-h-0 flex-1 bg-background">
@@ -304,6 +338,23 @@ function RemoteMount({
       <div ref={containerRef} className="h-full min-h-0 overflow-auto" />
     </section>
   );
+}
+
+function hostManifestUrl(environment: EnvironmentName) {
+  return `${deploymentApiBaseUrl}/api/environments/${environment}/host-manifest`;
+}
+
+function trimTrailingSlash(value: string) {
+  return value.replace(/\/+$/, "");
+}
+
+function getHostEnvironment(): EnvironmentName | null {
+  const value = import.meta.env.VITE_HOST_ENVIRONMENT?.trim();
+  return environments.includes(value as EnvironmentName) ? (value as EnvironmentName) : null;
+}
+
+function hostLabel() {
+  return hostEnvironment ? `${hostEnvironment} environment` : "local integration";
 }
 
 function resolveRemoteModule(remoteModule: FederatedRemoteModule): RemoteModule {

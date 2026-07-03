@@ -1,6 +1,6 @@
 import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
 import { deploymentConfig } from "./config.js";
-import type { EnvironmentManifest, HostManifest, RemoteVersion } from "./types.js";
+import type { EnvironmentManifest, HostManifest, RemoteRelease, RemoteVersion } from "./types.js";
 
 export type StorageContainerSummary = {
   name: string;
@@ -40,6 +40,26 @@ export function remoteVersionPrefix(remoteId: string, version: string) {
 
 export function remoteMetaPath(remoteId: string, version: string) {
   return `${remoteVersionPrefix(remoteId, version)}/meta.json`;
+}
+
+export function releaseVersionPrefix(remoteId: string, version: string) {
+  return `releases/${remoteId}/versions/${version}`;
+}
+
+export function releaseManifestPath(remoteId: string, version: string) {
+  return `${releaseVersionPrefix(remoteId, version)}/release.json`;
+}
+
+export function backendMetaPath(remoteId: string, version: string) {
+  return `${releaseVersionPrefix(remoteId, version)}/backend.json`;
+}
+
+export function backendSnapshotPath(remoteId: string, version: string) {
+  return `${releaseVersionPrefix(remoteId, version)}/backend-snapshot.json`;
+}
+
+export function contractArtifactPath(remoteId: string, version: string) {
+  return `${releaseVersionPrefix(remoteId, version)}/contracts/frontend-backend.contract.json`;
 }
 
 export function environmentManifestPath(environment: string) {
@@ -89,7 +109,11 @@ export async function getEnvironmentManifest(environment: string): Promise<Envir
         {
           remoteId: remote.id,
           version: null,
+          releasePath: null,
           remoteEntryPath: null,
+          frontendVersion: null,
+          backendVersion: null,
+          contractVerified: null,
           updatedAt: null
         }
       ])
@@ -115,7 +139,8 @@ export function toHostManifest(manifest: EnvironmentManifest): HostManifest {
           remoteId,
           {
             version: remote.version as string,
-            remoteEntryUrl: storageUrl(remote.remoteEntryPath as string)
+            remoteEntryUrl: storageUrl(remote.remoteEntryPath as string),
+            apiBaseUrl: `${deploymentConfig.publicBaseUrl}/api/runtime/${manifest.environment}/${remoteId}/api`
           }
         ])
     )
@@ -144,6 +169,30 @@ export async function listRemoteVersions(remoteId: string): Promise<RemoteVersio
 
 export async function getLatestRemoteVersion(remoteId: string) {
   return (await listRemoteVersions(remoteId))[0] ?? null;
+}
+
+export async function listRemoteReleases(remoteId: string): Promise<RemoteRelease[]> {
+  const container = await ensureContainer();
+  const prefix = `releases/${remoteId}/versions/`;
+  const releases: RemoteRelease[] = [];
+
+  for await (const blob of container.listBlobsFlat({ prefix })) {
+    if (!blob.name.endsWith("/release.json")) {
+      continue;
+    }
+
+    const release = await readJsonBlob<RemoteRelease>(blob.name);
+
+    if (release) {
+      releases.push(release);
+    }
+  }
+
+  return releases.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function getLatestRemoteRelease(remoteId: string) {
+  return (await listRemoteReleases(remoteId))[0] ?? null;
 }
 
 export async function listStorageContainers(): Promise<StorageContainerSummary[]> {

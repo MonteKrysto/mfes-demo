@@ -1,0 +1,53 @@
+{
+  "consumer": "shire-sides-ui",
+  "provider": "shire-sides-api",
+  "interactions": [
+    {
+      "description": "loads shire sides",
+      "request": { "method": "GET", "path": "/api/shire-sides/sides" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "station": { "type": "string" },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "name": { "type": "string" },
+                  "count": { "type": "string" },
+                  "note": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "description": "loads shire side prep tasks",
+      "request": { "method": "GET", "path": "/api/shire-sides/prep" },
+      "response": {
+        "status": 200,
+        "body": {
+          "type": "object",
+          "required": {
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": {
+                  "title": { "type": "string" },
+                  "value": { "type": "string" },
+                  "detail": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

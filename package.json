@@ -31,9 +31,17 @@
     "azurite:up": "docker compose up -d azurite",
     "azurite:down": "docker compose down",
     "publish:frodos-franks": "pnpm --filter deployment publish:remote frodos-franks",
+    "publish:frodos-franks:backend": "pnpm --filter deployment publish:remote frodos-franks --frontend-current",
+    "publish:frodos-franks:frontend": "pnpm --filter deployment publish:remote frodos-franks --backend-current",
     "publish:boromirs-burgers": "pnpm --filter deployment publish:remote boromirs-burgers",
+    "publish:boromirs-burgers:backend": "pnpm --filter deployment publish:remote boromirs-burgers --frontend-current",
+    "publish:boromirs-burgers:frontend": "pnpm --filter deployment publish:remote boromirs-burgers --backend-current",
     "publish:shire-sides": "pnpm --filter deployment publish:remote franks-sides",
-    "publish:gondor-sauces": "pnpm --filter deployment publish:remote burgers-sauces"
+    "publish:shire-sides:backend": "pnpm --filter deployment publish:remote franks-sides --frontend-current",
+    "publish:shire-sides:frontend": "pnpm --filter deployment publish:remote franks-sides --backend-current",
+    "publish:gondor-sauces": "pnpm --filter deployment publish:remote burgers-sauces",
+    "publish:gondor-sauces:backend": "pnpm --filter deployment publish:remote burgers-sauces --frontend-current",
+    "publish:gondor-sauces:frontend": "pnpm --filter deployment publish:remote burgers-sauces --backend-current"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",
