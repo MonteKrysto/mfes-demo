@@ -69,8 +69,10 @@ const navItems = [
 ];
 
 export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
-  const gondorSaucesEntryUrl = remoteEntries?.["gondor-sauces"]?.remoteEntryUrl ?? gondorSaucesRemoteEntryUrl;
+  const gondorSaucesEntryUrl = remoteEntries ? remoteEntries["gondor-sauces"]?.remoteEntryUrl : gondorSaucesRemoteEntryUrl;
   const gondorSaucesApiBaseUrl = remoteEntries?.["gondor-sauces"]?.apiBaseUrl;
+  const gondorSaucesAvailable = Boolean(gondorSaucesEntryUrl);
+  const visibleNavItems = navItems.filter((item) => item.to !== "/gondor-sauces" || gondorSaucesAvailable);
 
   return (
     <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
@@ -86,7 +88,7 @@ export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
           </div>
         </div>
         <nav className="mt-6 grid gap-2">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = item.icon;
             return (
               <NavLink
@@ -115,13 +117,27 @@ export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
           <Route path="/loyalty" element={<Loyalty />} />
           <Route
             path="/gondor-sauces/*"
-            element={<NestedRemote name="Gondor Sauces" remoteEntryUrl={gondorSaucesEntryUrl} apiBaseUrl={gondorSaucesApiBaseUrl} basename={joinBasename(basename, "gondor-sauces")} />}
+            element={
+              gondorSaucesEntryUrl ? (
+                <NestedRemote name="Gondor Sauces" remoteEntryUrl={gondorSaucesEntryUrl} apiBaseUrl={gondorSaucesApiBaseUrl} basename={joinBasename(basename, "gondor-sauces")} />
+              ) : (
+                <UnavailableNestedRemote name="Gondor Sauces" />
+              )
+            }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
     </div>
     </ApiBaseUrlContext.Provider>
+  );
+}
+
+function UnavailableNestedRemote({ name }: { name: string }) {
+  return (
+    <section className="grid min-h-[30rem] place-items-center px-6 text-center text-sm text-muted-foreground">
+      No deployed release is assigned to {name} in this environment.
+    </section>
   );
 }
 

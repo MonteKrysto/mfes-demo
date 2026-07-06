@@ -2,6 +2,8 @@
 
 This app is a local release-management console for the micro frontend demo. It uses an Express API to talk to Azure Blob Storage. In local development, that storage is Azurite from `docker-compose.yml`.
 
+Backend images are stored separately in the local Docker Registry at `localhost:5001`. That mirrors the production split where Azure Blob Storage would hold release metadata and frontend artifacts, while Azure Container Registry would hold backend images.
+
 ## Storage Model
 
 One blob container is used:
@@ -14,6 +16,12 @@ Immutable remote builds are stored by remote and version:
 - `remotes/boromirs-burgers/versions/{version}/...`
 
 Each version stores the full Vite build output, not only `remoteEntry.js`, because Module Federation remote entries load sibling JS and CSS chunks. Release bundles also store `backend-snapshot.json`, which is what deployed-style hosts read through the deployment API runtime proxy.
+
+Backend image metadata is stored in the release bundle, but the actual backend image is pushed to the local Docker Registry:
+
+- `backend.json` stores the image tag and digest.
+- `release.json` embeds the backend metadata alongside the frontend artifact and contract result.
+- `backend-snapshot.json` remains the local runtime simulation for deployed-style API responses.
 
 Environment manifests are mutable pointers:
 
@@ -43,6 +51,7 @@ URLs:
 - Deployment UI: http://localhost:5176
 - Deployment API: http://localhost:5050
 - Azurite Blob endpoint: http://localhost:10000/devstoreaccount1
+- Local Docker Registry catalog: http://localhost:5001/v2/_catalog
 
 ## Publish A Remote
 
@@ -67,7 +76,7 @@ BUILD_VERSION=20260630-demo-main pnpm publish:frodos-franks
 
 ## Promotion
 
-Publishing creates a verified release bundle in storage. It does not deploy that bundle to any environment by itself. The bundle includes the frontend artifact, fake backend image metadata, backend response snapshot, and contract verification result.
+Publishing creates a verified release bundle in storage. It does not deploy that bundle to any environment by itself. The bundle includes the frontend artifact, backend image metadata, backend response snapshot, and contract verification result.
 
 The UI supports:
 

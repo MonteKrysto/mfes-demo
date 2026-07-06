@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import mime from "mime";
 import { deploymentConfig } from "./config.js";
@@ -128,7 +129,8 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
         branch: input.branch,
         sha: input.sha,
         createdAt: new Date().toISOString(),
-        image: `local.azurecr.io/${remote.packageName}-api:${input.version}`,
+        image: process.env.BACKEND_IMAGE ?? `local.azurecr.io/${remote.packageName}-api:${input.version}`,
+        imageDigest: process.env.BACKEND_IMAGE_DIGEST || fakeImageDigest(input.remoteId, input.version, input.backendSnapshot),
         changed: input.backendChanged ?? true,
         snapshotPath
       };
@@ -152,6 +154,7 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
     releasePath: releaseManifestPath(input.remoteId, input.version),
     frontend: {
       changed: input.frontendChanged ?? true,
+      runtimeContractVersion: 2,
       version: input.frontend.version,
       remoteEntryPath: input.frontend.remoteEntryPath,
       artifactPrefix: input.frontend.artifactPrefix
@@ -163,6 +166,11 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
   await writeJsonBlob(backendMetaPath(input.remoteId, input.version), backend);
   await writeJsonBlob(releaseManifestPath(input.remoteId, input.version), release);
   return release;
+}
+
+function fakeImageDigest(remoteId: string, version: string, snapshot: Record<string, unknown> | undefined) {
+  const content = JSON.stringify({ remoteId, version, snapshot });
+  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
 }
 
 async function listFiles(dir: string): Promise<string[]> {

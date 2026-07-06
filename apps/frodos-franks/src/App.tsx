@@ -73,28 +73,30 @@ const navItems = [
 ];
 
 export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
-  const shireSidesEntryUrl = remoteEntries?.["shire-sides"]?.remoteEntryUrl ?? shireSidesRemoteEntryUrl;
+  const shireSidesEntryUrl = remoteEntries ? remoteEntries["shire-sides"]?.remoteEntryUrl : shireSidesRemoteEntryUrl;
   const shireSidesApiBaseUrl = remoteEntries?.["shire-sides"]?.apiBaseUrl;
+  const shireSidesAvailable = Boolean(shireSidesEntryUrl);
+  const visibleNavItems = navItems.filter((item) => item.to !== "/shire-sides" || shireSidesAvailable);
 
   return (
     <ApiBaseUrlContext.Provider value={apiBaseUrl ?? localApiBaseUrl}>
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b-4 border-red-600 bg-card">
+      <header className="border-b-4 border-blue-600 bg-card">
         <div className="mx-auto flex max-w-6xl flex-col gap-5 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-red-700">Remote host</p>
-            <h1 className="text-3xl font-bold text-red-950">Frodos Franks</h1>
+            <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">Remote host</p>
+            <h1 className="text-3xl font-bold text-blue-950">Frodos Franks</h1>
             <p className="text-sm text-muted-foreground">Tiny carts, big quests, fast lunches.</p>
           </div>
           <nav className="flex flex-wrap gap-2">
-            {navItems.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    cn(buttonVariants({ variant: "outline", size: "sm" }), isActive && "bg-red-50 text-red-900")
+                    cn(buttonVariants({ variant: "outline", size: "sm" }), isActive && "bg-blue-50 text-blue-900")
                   }
                 >
                   <Icon className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -112,7 +114,13 @@ export function App({ apiBaseUrl, basename, remoteEntries }: AppProps) {
         <Route path="/catering" element={<Catering />} />
         <Route
           path="/shire-sides/*"
-          element={<NestedRemote name="Shire Sides" remoteEntryUrl={shireSidesEntryUrl} apiBaseUrl={shireSidesApiBaseUrl} basename={joinBasename(basename, "shire-sides")} />}
+          element={
+            shireSidesEntryUrl ? (
+              <NestedRemote name="Shire Sides" remoteEntryUrl={shireSidesEntryUrl} apiBaseUrl={shireSidesApiBaseUrl} basename={joinBasename(basename, "shire-sides")} />
+            ) : (
+              <UnavailableNestedRemote name="Shire Sides" />
+            )
+          }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
@@ -205,7 +213,7 @@ function PageShell({
   return (
     <main className="mx-auto grid max-w-6xl gap-5 px-5 py-6 lg:grid-cols-[1fr_18rem]">
       <section>
-        <p className="text-sm font-semibold uppercase tracking-wide text-red-700">{eyebrow}</p>
+        <p className="text-sm font-semibold uppercase tracking-wide text-blue-700">{eyebrow}</p>
         <h2 className="mt-1 text-3xl font-bold">{title}</h2>
         {status === "loading" ? <p className="mt-5 text-sm text-muted-foreground">Loading Franks API data...</p> : null}
         {status === "error" ? <p className="mt-5 text-sm text-destructive">Unable to load Franks API data.</p> : null}
@@ -213,6 +221,14 @@ function PageShell({
       </section>
       <aside>{aside}</aside>
     </main>
+  );
+}
+
+function UnavailableNestedRemote({ name }: { name: string }) {
+  return (
+    <section className="grid min-h-[30rem] place-items-center px-6 text-center text-sm text-muted-foreground">
+      No deployed release is assigned to {name} in this environment.
+    </section>
   );
 }
 
@@ -267,7 +283,7 @@ function NestedRemote({ apiBaseUrl, name, remoteEntryUrl, basename }: { apiBaseU
 
 function MenuCard({ name, price, detail }: { name: string; price: string; detail: string }) {
   return (
-    <Card className="rounded-lg border-red-200 bg-white shadow-sm">
+    <Card className="rounded-lg border-blue-200 bg-white shadow-sm">
       <CardHeader>
         <CardDescription>{price}</CardDescription>
         <CardTitle className="text-xl text-red-950">{name}</CardTitle>
@@ -281,11 +297,11 @@ function MenuCard({ name, price, detail }: { name: string; price: string; detail
 
 function StatusCard({ icon, title, value, detail }: { icon: ReactNode; title: string; value: string; detail: string }) {
   return (
-    <Card className="rounded-lg border-red-200 bg-white shadow-sm">
+    <Card className="rounded-lg border-blue-200 bg-white shadow-sm">
       <CardHeader>
-        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-emerald-200 text-red-950">{icon}</div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-200 text-blue-950">{icon}</div>
         <CardDescription>{title}</CardDescription>
-        <CardTitle className="text-xl text-red-950">{value}</CardTitle>
+        <CardTitle className="text-xl text-blue-950">{value}</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-sm leading-6 text-muted-foreground">{detail}</p>
@@ -296,13 +312,13 @@ function StatusCard({ icon, title, value, detail }: { icon: ReactNode; title: st
 
 function Feature({ title, value, detail }: { title: string; value: string; detail: string }) {
   return (
-    <Card className="rounded-lg border-red-300 bg-red-700 text-white shadow-sm">
+    <Card className="rounded-lg border-blue-300 bg-blue-700 text-white shadow-sm">
       <CardHeader>
-        <CardDescription className="text-red-100">{title}</CardDescription>
+        <CardDescription className="text-blue-100">{title}</CardDescription>
         <CardTitle className="text-3xl">{value}</CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-sm leading-6 text-red-100">{detail}</p>
+        <p className="text-sm leading-6 text-blue-100">{detail}</p>
       </CardContent>
     </Card>
   );

@@ -15,6 +15,7 @@ export type BackendVersion = {
   sha: string;
   createdAt: string;
   image: string;
+  imageDigest?: string;
   changed: boolean;
   snapshotPath?: string;
 };
@@ -38,6 +39,7 @@ export type RemoteRelease = {
   releasePath: string;
   frontend: {
     changed: boolean;
+    runtimeContractVersion?: number;
     version: string;
     remoteEntryPath: string;
     artifactPrefix: string;

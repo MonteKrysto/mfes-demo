@@ -6,7 +6,6 @@ import {
   ensureContainer,
   getContainerClient,
   getEnvironmentManifest,
-  getLatestRemoteRelease,
   listRemoteReleases,
   listStorageContainers,
   listStoragePath,
@@ -14,7 +13,8 @@ import {
   readJsonBlob,
   releaseManifestPath,
   saveEnvironmentManifest,
-  storageUrl
+  storageUrl,
+  updateEnvironmentManifest
 } from "./storage.js";
 import type { EnvironmentManifest, HostManifest, RemoteRelease } from "./types.js";
 
@@ -172,7 +172,6 @@ app.put("/api/environments/:environment/remotes/:remoteId", async (request, resp
     }
 
     const version = String(request.body.version ?? "");
-    const manifest = await getEnvironmentManifest(request.params.environment);
     const release = await readJsonBlob<RemoteRelease>(releaseManifestPath(request.params.remoteId, version));
 
     if (!release) {
@@ -190,19 +189,10 @@ app.put("/api/environments/:environment/remotes/:remoteId", async (request, resp
       return;
     }
 
-    manifest.remotes[request.params.remoteId] = {
-      remoteId: request.params.remoteId,
-      version: release.version,
-      releasePath: release.releasePath,
-      remoteEntryPath: release.frontend.remoteEntryPath,
-      frontendVersion: release.frontend.version,
-      backendVersion: release.backend.version,
-      contractVerified: release.contract.verified,
-      updatedAt: new Date().toISOString()
-    };
-
-    await saveEnvironmentManifest(manifest);
-    response.json(await getEnvironmentManifest(request.params.environment));
+    const manifest = await updateEnvironmentManifest(request.params.environment, (current) =>
+      assignReleaseToManifest(current, request.params.remoteId, release)
+    );
+    response.json(manifest);
   } catch (error) {
     next(error);
   }
@@ -231,7 +221,7 @@ app.post("/api/promote", async (request, response, next) => {
     }
 
     if (!version) {
-      version = (await getLatestRemoteRelease(remoteId))?.version;
+      version = (await getLatestDeployableRemoteRelease(remoteId))?.version;
     }
 
     if (!version) {
@@ -256,20 +246,11 @@ app.post("/api/promote", async (request, response, next) => {
       return;
     }
 
-    const manifest = await getEnvironmentManifest(toEnvironment);
-    manifest.remotes[remoteId] = {
-      remoteId,
-      version: release.version,
-      releasePath: release.releasePath,
-      remoteEntryPath: release.frontend.remoteEntryPath,
-      frontendVersion: release.frontend.version,
-      backendVersion: release.backend.version,
-      contractVerified: release.contract.verified,
-      updatedAt: new Date().toISOString()
-    };
-    await saveEnvironmentManifest(manifest);
+    const manifest = await updateEnvironmentManifest(toEnvironment, (current) =>
+      assignReleaseToManifest(current, remoteId, release)
+    );
 
-    response.json(await getEnvironmentManifest(toEnvironment));
+    response.json(manifest);
   } catch (error) {
     next(error);
   }
@@ -339,11 +320,44 @@ async function toDeployableHostManifest(manifest: EnvironmentManifest): Promise<
   };
 }
 
+async function getLatestDeployableRemoteRelease(remoteId: string) {
+  return (await listRemoteReleases(remoteId)).find(isDeployableRelease) ?? null;
+}
+
+function assignReleaseToManifest(manifest: EnvironmentManifest, remoteId: string, release: RemoteRelease): EnvironmentManifest {
+  return {
+    ...manifest,
+    remotes: {
+      ...manifest.remotes,
+      [remoteId]: {
+        remoteId,
+        version: release.version,
+        releasePath: release.releasePath,
+        remoteEntryPath: release.frontend.remoteEntryPath,
+        frontendVersion: release.frontend.version,
+        backendVersion: release.backend.version,
+        contractVerified: release.contract.verified,
+        updatedAt: new Date().toISOString()
+      }
+    }
+  };
+}
+
 function isDeployableRelease(release: RemoteRelease) {
-  return Boolean(release.frontend.remoteEntryPath && release.backend.snapshotPath && release.contract.verified);
+  return Boolean(
+    release.frontend.remoteEntryPath &&
+      release.frontend.runtimeContractVersion &&
+      release.frontend.runtimeContractVersion >= 2 &&
+      release.backend.snapshotPath &&
+      release.contract.verified
+  );
 }
 
 function deployableReleaseError(release: RemoteRelease) {
+  if (!release.frontend.runtimeContractVersion || release.frontend.runtimeContractVersion < 2) {
+    return `Release ${release.version} is a legacy build without environment-aware remote gating. Run fake CI again before assigning it to an environment.`;
+  }
+
   if (!release.backend.snapshotPath) {
     return `Release ${release.version} is a legacy build without a backend snapshot. Run fake CI again before assigning it to an environment.`;
   }

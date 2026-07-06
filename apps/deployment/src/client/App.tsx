@@ -184,6 +184,7 @@ export function App() {
                         <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest release</p>
                         <div className="mt-1 font-semibold">{releaseLabel(latestRelease)}</div>
                         <div className="mt-1 text-xs text-slate-500">{releaseSource(latestRelease)}</div>
+                        <div className="mt-1 truncate text-xs text-slate-500">API image {shortDigest(latestRelease.backend.imageDigest)}</div>
                         <div className="mt-3 flex flex-wrap gap-2 text-xs">
                           <ReleaseBadge kind="frontend" changed={latestRelease.frontend.changed} />
                           <ReleaseBadge kind="api" changed={latestRelease.backend.changed} />
@@ -197,6 +198,7 @@ export function App() {
                           <div key={release.version} className="rounded-md border border-slate-200 px-3 py-2">
                             <div className="font-medium">{releaseLabel(release)}</div>
                             <div className="mt-1 truncate text-xs text-slate-500">ID {displayVersionId(release.version)}</div>
+                            <div className="mt-1 truncate text-xs text-slate-500">API image {shortDigest(release.backend.imageDigest)}</div>
                           </div>
                         ))}
                       </div>
@@ -580,7 +582,13 @@ function releaseOptionLabel(release: RemoteRelease) {
 }
 
 function isDeployableRelease(release: RemoteRelease) {
-  return Boolean(release.frontend.remoteEntryPath && release.backend.snapshotPath && release.contract.verified);
+  return Boolean(
+    release.frontend.remoteEntryPath &&
+      release.frontend.runtimeContractVersion &&
+      release.frontend.runtimeContractVersion >= 2 &&
+      release.backend.snapshotPath &&
+      release.contract.verified
+  );
 }
 
 function releaseSource(release: RemoteRelease) {
@@ -607,6 +615,10 @@ function displayVersionId(version: string) {
   }
 
   return label;
+}
+
+function shortDigest(digest: string | undefined) {
+  return digest ? `sha256:${digest.replace(/^sha256:/, "").slice(0, 12)}` : "not recorded";
 }
 
 function formatDateTime(value: string) {

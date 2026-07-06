@@ -66,6 +66,7 @@ Useful compose URLs:
 - Prod environment host: http://localhost:5185
 - Deployment UI: http://localhost:5176
 - Deployment API: http://localhost:5050
+- Local Docker Registry: http://localhost:5001/v2/_catalog
 - Frodos Franks UI/API: http://localhost:5174 / http://localhost:6074/api/franks/menu
 - Boromirs Burgers UI/API: http://localhost:5175 / http://localhost:6075/api/burgers/grill
 - Shire Sides UI/API: http://localhost:5177 / http://localhost:6077/api/shire-sides/sides
@@ -108,7 +109,14 @@ http://localhost:5185  -> http://localhost:5050/api/environments/prod/host-manif
 
 That means editing a remote's source and seeing it at its standalone URL or the local integration host is immediate. A deployed-style host reads frontend artifacts and backend snapshots from the assigned release bundle, so it only sees a change after fake CI publishes a new release and the deployment UI assigns that release to the environment.
 
-Fake CI publish commands create verified release bundles only. They do not assign that release to `dev`, `staging`, or `prod`; use the deployment UI to choose which environment should point at the new release. A release bundle contains the frontend artifact reference, fake backend image metadata, a backend response snapshot, and a stored frontend/backend contract verification result.
+Fake CI publish commands create verified release bundles only. They do not assign that release to `dev`, `staging`, or `prod`; use the deployment UI to choose which environment should point at the new release. A release bundle contains the frontend artifact reference, backend image metadata, a backend response snapshot, and a stored frontend/backend contract verification result.
+
+The local stack uses two Azure-adjacent pieces:
+
+- Azurite stores frontend artifacts, release manifests, backend metadata, and backend snapshots.
+- The local Docker Registry stores backend container images, acting as the local equivalent of Azure Container Registry.
+
+The fake CI targets build and push a backend image such as `localhost:5001/mfes-demo/frodos-franks-api:{version}` before writing the release metadata to Azurite.
 
 ```bash
 make fake-ci-frodos-franks

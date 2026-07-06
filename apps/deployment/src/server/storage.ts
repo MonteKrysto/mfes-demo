@@ -1,4 +1,4 @@
-import { BlobServiceClient, type ContainerClient } from "@azure/storage-blob";
+import { BlobServiceClient, type BlobRequestConditions, type ContainerClient } from "@azure/storage-blob";
 import { deploymentConfig } from "./config.js";
 import type { EnvironmentManifest, HostManifest, RemoteRelease, RemoteVersion } from "./types.js";
 
@@ -71,6 +71,10 @@ export function storageUrl(blobPath: string) {
 }
 
 export async function readJsonBlob<T>(blobPath: string): Promise<T | null> {
+  return (await readJsonBlobWithEtag<T>(blobPath))?.value ?? null;
+}
+
+async function readJsonBlobWithEtag<T>(blobPath: string): Promise<{ etag: string; value: T } | null> {
   const blob = (await ensureContainer()).getBlockBlobClient(blobPath);
 
   if (!(await blob.exists())) {
@@ -79,14 +83,18 @@ export async function readJsonBlob<T>(blobPath: string): Promise<T | null> {
 
   const response = await blob.download();
   const text = await streamToString(response.readableStreamBody);
-  return JSON.parse(text) as T;
+  return {
+    etag: response.etag ?? "",
+    value: JSON.parse(text) as T
+  };
 }
 
-export async function writeJsonBlob(blobPath: string, value: unknown) {
+export async function writeJsonBlob(blobPath: string, value: unknown, conditions?: BlobRequestConditions) {
   const content = `${JSON.stringify(value, null, 2)}\n`;
   await getContainerClient()
     .getBlockBlobClient(blobPath)
     .upload(content, Buffer.byteLength(content), {
+      conditions,
       blobHTTPHeaders: {
         blobContentType: "application/json; charset=utf-8"
       }
@@ -100,6 +108,10 @@ export async function getEnvironmentManifest(environment: string): Promise<Envir
     return existing;
   }
 
+  return createEnvironmentManifest(environment);
+}
+
+function createEnvironmentManifest(environment: string): EnvironmentManifest {
   return {
     environment,
     updatedAt: new Date().toISOString(),
@@ -126,6 +138,34 @@ export async function saveEnvironmentManifest(manifest: EnvironmentManifest) {
     ...manifest,
     updatedAt: new Date().toISOString()
   });
+}
+
+export async function updateEnvironmentManifest(
+  environment: string,
+  update: (manifest: EnvironmentManifest) => EnvironmentManifest,
+  maxAttempts = 3
+) {
+  const blobPath = environmentManifestPath(environment);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const existing = await readJsonBlobWithEtag<EnvironmentManifest>(blobPath);
+    const current = existing?.value ?? createEnvironmentManifest(environment);
+    const next = {
+      ...update(current),
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await writeJsonBlob(blobPath, next, existing?.etag ? { ifMatch: existing.etag } : { ifNoneMatch: "*" });
+      return next;
+    } catch (error) {
+      if (attempt === maxAttempts || !isPreconditionFailure(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error(`Environment ${environment} could not be updated after ${maxAttempts} attempts`);
 }
 
 export function toHostManifest(manifest: EnvironmentManifest): HostManifest {
@@ -256,6 +296,15 @@ function normalizePrefix(prefix: string) {
   }
 
   return trimmed.endsWith("/") ? trimmed : `${trimmed}/`;
+}
+
+function isPreconditionFailure(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "statusCode" in error &&
+    Number((error as { statusCode?: number }).statusCode) === 412
+  );
 }
 
 async function streamToString(stream: NodeJS.ReadableStream | undefined): Promise<string> {

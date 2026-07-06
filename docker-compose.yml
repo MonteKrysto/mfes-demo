@@ -9,6 +9,15 @@ services:
     volumes:
       - azurite-data:/data
 
+  registry:
+    image: registry:2
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "5001:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+
   deployment-api:
     build:
       context: .
@@ -16,6 +25,7 @@ services:
     command: pnpm --filter deployment dev:api
     depends_on:
       - azurite
+      - registry
     environment:
       AZURE_STORAGE_CONNECTION_STRING: "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;QueueEndpoint=http://azurite:10001/devstoreaccount1;TableEndpoint=http://azurite:10002/devstoreaccount1;"
       DEPLOYMENT_PUBLIC_BASE_URL: http://localhost:5050
@@ -193,3 +203,4 @@ services:
 
 volumes:
   azurite-data:
+  registry-data:
