@@ -103,6 +103,10 @@ function HostShell() {
         ? manifest?.remotes[remote.id]?.remoteEntryUrl ?? null
         : remote.localRemoteEntryUrl
       : null;
+  const visibleRemotes =
+    isEnvironmentHost && manifestStatus === "ready"
+      ? remotes.filter((item) => manifest?.remotes[item.id]?.remoteEntryUrl)
+      : remotes;
 
   useEffect(() => {
     let disposed = false;
@@ -197,7 +201,7 @@ function HostShell() {
         </header>
 
         <nav className="grid gap-3 p-3">
-          {remotes.map((item) => {
+          {visibleRemotes.map((item) => {
             const Icon = item.icon;
 
             return (
@@ -219,6 +223,11 @@ function HostShell() {
               </NavLink>
             );
           })}
+          {visibleRemotes.length === 0 ? (
+            <p className="px-2 py-6 text-center text-sm leading-6 text-muted-foreground">
+              No applications are assigned to this environment.
+            </p>
+          ) : null}
         </nav>
       </aside>
 

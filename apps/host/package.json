@@ -9,6 +9,8 @@
     "dev:ui": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "preview": "concurrently -n host-preview,host-api -c cyan,blue \"vite preview --host 0.0.0.0 --port 4173\" \"tsx src/server/index.ts\"",
+    "preview:ui": "vite preview --host 0.0.0.0",
+    "build-and-preview:ui": "pnpm build && pnpm preview:ui",
     "typecheck": "tsc -b",
     "lint": "eslint .",
     "test": "vitest run"

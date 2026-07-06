@@ -59,6 +59,9 @@ export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVe
     const contentType = mime.getType(filePath) || "application/octet-stream";
 
     await container.getBlockBlobClient(blobPath).uploadData(content, {
+      conditions: {
+        ifNoneMatch: "*"
+      },
       blobHTTPHeaders: {
         blobContentType: contentType
       }
@@ -66,6 +69,9 @@ export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVe
 
     if (relativePath.startsWith("assets/") && path.extname(relativePath) === ".css") {
       await container.getBlockBlobClient(`${artifactPrefix}/${path.basename(relativePath)}`).uploadData(content, {
+        conditions: {
+          ifNoneMatch: "*"
+        },
         blobHTTPHeaders: {
           blobContentType: contentType
         }
@@ -83,7 +89,7 @@ export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVe
     remoteEntryPath: `${artifactPrefix}/assets/remoteEntry.js`
   };
 
-  await writeJsonBlob(remoteMetaPath(input.remoteId, input.version), meta);
+  await writeJsonBlob(remoteMetaPath(input.remoteId, input.version), meta, { ifNoneMatch: "*" });
   return meta;
 }
 
@@ -103,6 +109,9 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
   const container = await ensureContainer();
 
   await container.getBlockBlobClient(contractPath).uploadData(contractContent, {
+    conditions: {
+      ifNoneMatch: "*"
+    },
     blobHTTPHeaders: {
       blobContentType: "application/json; charset=utf-8"
     }
@@ -115,7 +124,7 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
   }
 
   if (input.backendSnapshot) {
-    await writeJsonBlob(snapshotPath, input.backendSnapshot);
+    await writeJsonBlob(snapshotPath, input.backendSnapshot, { ifNoneMatch: "*" });
   }
 
   const backend: BackendVersion = input.backend
@@ -163,8 +172,8 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
     contract: verification
   };
 
-  await writeJsonBlob(backendMetaPath(input.remoteId, input.version), backend);
-  await writeJsonBlob(releaseManifestPath(input.remoteId, input.version), release);
+  await writeJsonBlob(backendMetaPath(input.remoteId, input.version), backend, { ifNoneMatch: "*" });
+  await writeJsonBlob(releaseManifestPath(input.remoteId, input.version), release, { ifNoneMatch: "*" });
   return release;
 }
 
