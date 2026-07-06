@@ -27,6 +27,19 @@ const forceFrontendCurrent = process.argv.includes("--frontend-current");
 const forceBackendCurrent = process.argv.includes("--backend-current");
 const latestRelease = await getLatestRemoteRelease(remote.id);
 const appRoot = path.join(root, "apps", remote.packageName);
+const frontendRootFiles = new Set([
+  "components.json",
+  "eslint.config.js",
+  "index.html",
+  "package.json",
+  "postcss.config.js",
+  "tailwind.config.ts",
+  "tsconfig.json",
+  "tsconfig.node.json",
+  "vite.config.ts",
+  "vitest.config.ts"
+]);
+const backendRootFiles = new Set(["eslint.config.js", "package.json", "tsconfig.json", "tsconfig.node.json", "vitest.config.ts"]);
 const frontendSourceFingerprint = await hashSourceTree(appRoot, isFrontendSourceFile);
 const backendSourceFingerprint = await hashSourceTree(appRoot, isBackendSourceFile);
 const frontendChanged = forceFrontendCurrent
@@ -178,21 +191,20 @@ async function listFiles(dir: string): Promise<string[]> {
 }
 
 function isFrontendSourceFile(relativePath: string) {
-  return (
-    isTrackedSourceFile(relativePath) &&
-    !relativePath.startsWith("src/server/") &&
-    !relativePath.startsWith("src/contracts/")
-  );
+  if (relativePath.startsWith("src/")) {
+    return isSourceExtension(relativePath) && !relativePath.startsWith("src/server/") && !relativePath.startsWith("src/contracts/");
+  }
+
+  return frontendRootFiles.has(relativePath);
 }
 
 function isBackendSourceFile(relativePath: string) {
-  return isTrackedSourceFile(relativePath) && (relativePath.startsWith("src/server/") || relativePath.startsWith("src/contracts/"));
+  return (
+    (isSourceExtension(relativePath) && (relativePath.startsWith("src/server/") || relativePath.startsWith("src/contracts/"))) ||
+    backendRootFiles.has(relativePath)
+  );
 }
 
-function isTrackedSourceFile(relativePath: string) {
-  if (relativePath.startsWith("dist/") || relativePath.includes("/dist/")) {
-    return false;
-  }
-
+function isSourceExtension(relativePath: string) {
   return /\.(css|json|ts|tsx)$/.test(relativePath);
 }

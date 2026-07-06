@@ -575,10 +575,8 @@ function releaseLabel(release: RemoteRelease) {
 }
 
 function releaseOptionLabel(release: RemoteRelease) {
-  const frontend = release.frontend.changed ? "FE changed" : "FE reused";
-  const api = release.backend.changed ? "API changed" : "API reused";
   const status = isDeployableRelease(release) ? "" : " - legacy, cannot deploy";
-  return `${releaseLabel(release)} - ${frontend}, ${api}${status}`;
+  return `${releaseLabel(release)}${status}`;
 }
 
 function isDeployableRelease(release: RemoteRelease) {

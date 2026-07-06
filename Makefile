@@ -3,9 +3,13 @@ DEV_COMPOSE ?= docker compose -f docker-compose.yml -f docker-compose.dev.yml
 SERVICE ?= azurite
 LOCAL_REGISTRY ?= localhost:5001
 REGISTRY_IMAGE_PREFIX ?= $(LOCAL_REGISTRY)/mfes-demo
+BUILD_BRANCH ?= $(shell branch=$$(git branch --show-current 2>/dev/null); printf "%s" "$${branch:-local}")
+BUILD_SHA ?= $(shell sha=$$(git rev-parse --short HEAD 2>/dev/null); printf "%s" "$${sha:-local}")
+BUILD_SOURCE_LABEL ?= $(shell printf "%s-%s" "$(BUILD_BRANCH)" "$(BUILD_SHA)" | tr -cs "A-Za-z0-9._-" "-" | sed "s/^-//; s/-$$//")
 ifndef BUILD_VERSION
-BUILD_VERSION := $(shell date -u +%Y%m%dT%H%M%SZ-local-dev)
+BUILD_VERSION := $(shell date -u +%Y%m%dT%H%M%SZ)-$(BUILD_SOURCE_LABEL)
 endif
+BUILD_ENV = -e BUILD_VERSION=$(BUILD_VERSION) -e BUILD_BRANCH=$(BUILD_BRANCH) -e BUILD_SHA=$(BUILD_SHA)
 
 .PHONY: help build pull up down restart ps logs logs-follow ports clean dev-build dev-up dev-down dev-ps dev-logs dev-logs-follow preview-build preview-up preview-ps preview-logs preview-logs-follow azurite-up azurite-down azurite-logs azurite-restart registry-up registry-logs registry-catalog publish-dev publish-backend-image fake-ci-frodos-franks fake-ci-frodos-franks-backend fake-ci-frodos-franks-frontend fake-ci-boromirs-burgers fake-ci-boromirs-burgers-backend fake-ci-boromirs-burgers-frontend fake-ci-shire-sides fake-ci-shire-sides-backend fake-ci-shire-sides-frontend fake-ci-gondor-sauces fake-ci-gondor-sauces-backend fake-ci-gondor-sauces-frontend
 
@@ -154,47 +158,47 @@ publish-dev:
 
 fake-ci-frodos-franks:
 	$(MAKE) publish-backend-image PACKAGE_NAME=frodos-franks IMAGE_NAME=frodos-franks-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote frodos-franks
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote frodos-franks
 
 fake-ci-frodos-franks-backend:
 	$(MAKE) publish-backend-image PACKAGE_NAME=frodos-franks IMAGE_NAME=frodos-franks-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote frodos-franks --frontend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/frodos-franks-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote frodos-franks --frontend-current
 
 fake-ci-frodos-franks-frontend:
-	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote frodos-franks --backend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) deployment-api pnpm --filter deployment publish:remote frodos-franks --backend-current
 
 fake-ci-boromirs-burgers:
 	$(MAKE) publish-backend-image PACKAGE_NAME=boromirs-burgers IMAGE_NAME=boromirs-burgers-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote boromirs-burgers
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote boromirs-burgers
 
 fake-ci-boromirs-burgers-backend:
 	$(MAKE) publish-backend-image PACKAGE_NAME=boromirs-burgers IMAGE_NAME=boromirs-burgers-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote boromirs-burgers --frontend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/boromirs-burgers-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote boromirs-burgers --frontend-current
 
 fake-ci-boromirs-burgers-frontend:
-	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote boromirs-burgers --backend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) deployment-api pnpm --filter deployment publish:remote boromirs-burgers --backend-current
 
 fake-ci-shire-sides:
 	$(MAKE) publish-backend-image PACKAGE_NAME=franks-sides IMAGE_NAME=shire-sides-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote franks-sides
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote franks-sides
 
 fake-ci-shire-sides-backend:
 	$(MAKE) publish-backend-image PACKAGE_NAME=franks-sides IMAGE_NAME=shire-sides-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote franks-sides --frontend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/shire-sides-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote franks-sides --frontend-current
 
 fake-ci-shire-sides-frontend:
-	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote franks-sides --backend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) deployment-api pnpm --filter deployment publish:remote franks-sides --backend-current
 
 fake-ci-gondor-sauces:
 	$(MAKE) publish-backend-image PACKAGE_NAME=burgers-sauces IMAGE_NAME=gondor-sauces-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote burgers-sauces
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote burgers-sauces
 
 fake-ci-gondor-sauces-backend:
 	$(MAKE) publish-backend-image PACKAGE_NAME=burgers-sauces IMAGE_NAME=gondor-sauces-api BUILD_VERSION=$(BUILD_VERSION)
-	$(DEV_COMPOSE) exec -T -e BUILD_VERSION=$(BUILD_VERSION) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote burgers-sauces --frontend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) -e BACKEND_IMAGE=$(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) -e BACKEND_IMAGE_DIGEST=$$(docker inspect --format='{{index .RepoDigests 0}}' $(REGISTRY_IMAGE_PREFIX)/gondor-sauces-api:$(BUILD_VERSION) 2>/dev/null | sed 's/^.*@//') deployment-api pnpm --filter deployment publish:remote burgers-sauces --frontend-current
 
 fake-ci-gondor-sauces-frontend:
-	$(DEV_COMPOSE) exec -T deployment-api pnpm --filter deployment publish:remote burgers-sauces --backend-current
+	$(DEV_COMPOSE) exec -T $(BUILD_ENV) deployment-api pnpm --filter deployment publish:remote burgers-sauces --backend-current
 
 publish-backend-image:
 	$(COMPOSE) up -d registry

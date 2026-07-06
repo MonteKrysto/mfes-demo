@@ -16,7 +16,10 @@ export const providerResponses = {
       { name: "Rivendell Classic", price: "$8", detail: "Beef frank, cheddar, caramelized onions, garlic aioli." },
       { name: "Gondor Dog", price: "$9", detail: "Beef frank, smoked gouda, bacon, roasted garlic ketchup." },
       { name: "Rohan Rider", price: "$8", detail: "Beef frank, pepper jack, jalapeno bacon, chipotle mayo." },
-      { name: "Entwood Special", price: "$7", detail: "Veggie frank, roasted mushrooms, arugula, truffle aioli." }
+      { name: "Entwood Special", price: "$7", detail: "Veggie frank, roasted mushrooms, arugula, truffle aioli." },
+      { name: "Isengard Inferno", price: "$10", detail: "Beef frank, ghost pepper sauce, habanero slaw, fried onions." },
+      { name: "Lothlorien Light", price: "$7", detail: "Veggie frank, lemon herb sauce, fresh herbs, microgreens." },
+      { name: "Dwarven Delight", price: "$9", detail: "Beef frank, smoked cheddar, caramelized onions, stout mustard." }
     ]
   },
   "/api/franks/orders": {
