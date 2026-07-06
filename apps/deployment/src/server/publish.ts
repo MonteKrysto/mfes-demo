@@ -21,6 +21,7 @@ export type PublishRemoteInput = {
   version: string;
   branch: string;
   sha: string;
+  sourceFingerprint?: string;
   distPath: string;
 };
 
@@ -33,9 +34,11 @@ export type PublishReleaseInput = {
     version: string;
     remoteEntryPath: string;
     artifactPrefix: string;
+    sourceFingerprint?: string;
   };
   contractPath: string;
   backend?: BackendVersion;
+  backendSourceFingerprint?: string;
   backendSnapshot?: Record<string, unknown>;
   frontendChanged?: boolean;
   backendChanged?: boolean;
@@ -86,6 +89,7 @@ export async function publishRemote(input: PublishRemoteInput): Promise<RemoteVe
     sha: input.sha,
     createdAt: new Date().toISOString(),
     artifactPrefix,
+    sourceFingerprint: input.sourceFingerprint,
     remoteEntryPath: `${artifactPrefix}/assets/remoteEntry.js`
   };
 
@@ -130,6 +134,7 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
   const backend: BackendVersion = input.backend
     ? {
         ...input.backend,
+        sourceFingerprint: input.backendSourceFingerprint ?? input.backend.sourceFingerprint,
         changed: false
       }
     : {
@@ -140,6 +145,7 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
         createdAt: new Date().toISOString(),
         image: process.env.BACKEND_IMAGE ?? `local.azurecr.io/${remote.packageName}-api:${input.version}`,
         imageDigest: process.env.BACKEND_IMAGE_DIGEST || fakeImageDigest(input.remoteId, input.version, input.backendSnapshot),
+        sourceFingerprint: input.backendSourceFingerprint,
         changed: input.backendChanged ?? true,
         snapshotPath
       };
@@ -163,6 +169,7 @@ export async function publishRelease(input: PublishReleaseInput): Promise<Remote
     releasePath: releaseManifestPath(input.remoteId, input.version),
     frontend: {
       changed: input.frontendChanged ?? true,
+      sourceFingerprint: input.frontend.sourceFingerprint,
       runtimeContractVersion: 2,
       version: input.frontend.version,
       remoteEntryPath: input.frontend.remoteEntryPath,

@@ -5,6 +5,7 @@ export type RemoteVersion = {
   sha: string;
   createdAt: string;
   artifactPrefix: string;
+  sourceFingerprint?: string;
   remoteEntryPath: string;
 };
 
@@ -16,6 +17,7 @@ export type BackendVersion = {
   createdAt: string;
   image: string;
   imageDigest?: string;
+  sourceFingerprint?: string;
   changed: boolean;
   snapshotPath?: string;
 };
@@ -39,6 +41,7 @@ export type RemoteRelease = {
   releasePath: string;
   frontend: {
     changed: boolean;
+    sourceFingerprint?: string;
     runtimeContractVersion?: number;
     version: string;
     remoteEntryPath: string;

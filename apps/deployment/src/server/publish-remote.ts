@@ -1,4 +1,6 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import fs from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { deploymentConfig } from "./config.js";
@@ -21,11 +23,26 @@ const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}
 const sourceLabel = sha === "local" && branch === "local" ? "local-dev" : `${sanitize(branch)}-${sanitize(sha)}`;
 const version = process.env.BUILD_VERSION ?? `${timestamp}-${sourceLabel}`;
 const root = path.resolve(new URL("../../../../", import.meta.url).pathname);
-const frontendChanged = !process.argv.includes("--frontend-current");
-const backendChanged = !process.argv.includes("--backend-current");
+const forceFrontendCurrent = process.argv.includes("--frontend-current");
+const forceBackendCurrent = process.argv.includes("--backend-current");
 const latestRelease = await getLatestRemoteRelease(remote.id);
+const appRoot = path.join(root, "apps", remote.packageName);
+const frontendSourceFingerprint = await hashSourceTree(appRoot, isFrontendSourceFile);
+const backendSourceFingerprint = await hashSourceTree(appRoot, isBackendSourceFile);
+const frontendChanged = forceFrontendCurrent
+  ? false
+  : forceBackendCurrent
+    ? true
+    : latestRelease?.frontend.sourceFingerprint !== frontendSourceFingerprint;
+const backendChanged = forceBackendCurrent
+  ? false
+  : forceFrontendCurrent
+    ? true
+    : latestRelease?.backend.sourceFingerprint !== backendSourceFingerprint;
 
 console.log(`Building release bundle for ${remote.displayName} as ${version}`);
+console.log(`Frontend: ${frontendChanged ? "changed" : "reused"}`);
+console.log(`API: ${backendChanged ? "changed" : "reused"}`);
 execFileSync("pnpm", ["--filter", remote.packageName, "lint"], {
   cwd: root,
   env: process.env,
@@ -39,14 +56,25 @@ execFileSync("pnpm", ["--filter", remote.packageName, "test"], {
 
 const frontend = frontendChanged
   ? await buildAndPublishFrontend()
-  : latestRelease?.frontend;
+  : latestRelease?.frontend
+    ? {
+        ...latestRelease.frontend,
+        sourceFingerprint: frontendSourceFingerprint
+      }
+    : undefined;
 
 if (!frontend) {
   console.error(`No existing frontend artifact found for ${remote.displayName}; rerun without --frontend-current first.`);
   process.exit(1);
 }
 
-const backend = backendChanged ? undefined : latestRelease?.backend;
+const backend =
+  backendChanged || !latestRelease?.backend
+    ? undefined
+    : {
+        ...latestRelease.backend,
+        sourceFingerprint: backendSourceFingerprint
+      };
 
 if (!backendChanged && !backend) {
   console.error(`No existing backend snapshot found for ${remote.displayName}; rerun without --backend-current first.`);
@@ -61,6 +89,7 @@ const release = await publishRelease({
   frontend,
   backend,
   backendSnapshot: backendChanged ? await loadBackendSnapshot() : undefined,
+  backendSourceFingerprint: backendChanged ? backendSourceFingerprint : backend?.sourceFingerprint,
   frontendChanged,
   backendChanged,
   contractPath: path.join(root, "apps", remote.packageName, "src/contracts/frontend-backend.contract.json")
@@ -89,6 +118,7 @@ async function buildAndPublishFrontend() {
     version,
     branch,
     sha,
+    sourceFingerprint: frontendSourceFingerprint,
     distPath: path.join(root, remote.localDistPath)
   });
 }
@@ -116,4 +146,53 @@ async function loadBackendSnapshot() {
   }
 
   return appModule.providerResponses;
+}
+
+async function hashSourceTree(dir: string, includeFile: (relativePath: string) => boolean) {
+  const files = (await listFiles(dir))
+    .map((filePath) => path.relative(dir, filePath).split(path.sep).join("/"))
+    .filter(includeFile)
+    .sort();
+  const hash = createHash("sha256");
+
+  for (const relativePath of files) {
+    hash.update(relativePath);
+    hash.update("\0");
+    hash.update(await fs.readFile(path.join(dir, relativePath)));
+    hash.update("\0");
+  }
+
+  return `sha256:${hash.digest("hex")}`;
+}
+
+async function listFiles(dir: string): Promise<string[]> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const files = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(dir, entry.name);
+      return entry.isDirectory() ? listFiles(entryPath) : [entryPath];
+    })
+  );
+
+  return files.flat();
+}
+
+function isFrontendSourceFile(relativePath: string) {
+  return (
+    isTrackedSourceFile(relativePath) &&
+    !relativePath.startsWith("src/server/") &&
+    !relativePath.startsWith("src/contracts/")
+  );
+}
+
+function isBackendSourceFile(relativePath: string) {
+  return isTrackedSourceFile(relativePath) && (relativePath.startsWith("src/server/") || relativePath.startsWith("src/contracts/"));
+}
+
+function isTrackedSourceFile(relativePath: string) {
+  if (relativePath.startsWith("dist/") || relativePath.includes("/dist/")) {
+    return false;
+  }
+
+  return /\.(css|json|ts|tsx)$/.test(relativePath);
 }
